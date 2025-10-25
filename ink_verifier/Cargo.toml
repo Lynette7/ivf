@@ -1,0 +1,36 @@
+[package]
+name = "ink_verifier"
+version = "0.1.0"
+authors = ["[Lynette7] <[lynettewanjiru7@gmail.com]>"]
+edition = "2021"
+
+[dependencies]
+ink = { version = "5.0.0", default-features = false }
+
+# === Arkworks Crypto Dependencies ===
+ark-ff = { version = "0.4.0", default-features = false }
+ark-ec = { version = "0.4.0", default-features = false }
+ark-poly = { version = "0.4.0", default-features = false }
+ark-bn254 = { version = "0.4.0", default-features = false, features = ["curve"] }
+ark-plonk = { version = "0.4.0", default-features = false }
+ark-serialize = { version = "0.4.0", default-features = false }
+
+[dev-dependencies]
+ink_e2e = "5.0.0"
+
+[lib]
+path = "lib.rs"
+
+[features]
+default = ["std"]
+std = [
+    "ink/std",
+    "ark-ff/std",
+    "ark-ec/std",
+    "ark-poly/std",
+    "ark-bn254/std",
+    "ark-plonk/std",
+    "ark-serialize/std",
+]
+ink-as-dependency = []
+e2e-tests = []
