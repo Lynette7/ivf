@@ -1,0 +1,71 @@
+#![cfg_attr(not(feature = "std"), no_std, no_main)]
+
+#[ink::contract]
+mod Verifier {
+    use ink::env::call::{build_call, ExecutionInput, Selector};
+    use ink::prelude::vec::Vec;
+    use ink::primitives::H160;
+
+    // --- PRECOMPILE ADDRESSES ---
+    // These are the EVM-compatible precompile addresses from pallet-revive
+    const BN128_ADD_ADDR: H160 = H160([
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x06,
+    ]);
+    const BN128_MUL_ADDR: H160 = H160([
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x07,
+    ]);
+    const BN128_PAIRING_ADDR: H160 = H160([
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x08,
+    ]);
+
+    // --- BEGIN INJECTED VK ---
+    // Your generator will replace these placeholders.
+    // G1 points are 64 bytes, G2 are 128 bytes.
+
+    // const VK_ALPHA_G1: [u8; 64] = [%%VK_ALPHA_G1%%];
+    // const VK_BETA_G2: [u8; 128] = [%%VK_BETA_G2%%];
+    // const VK_GAMMA_G2: [u8; 128] = [%%VK_GAMMA_G2%%];
+    // const VK_DELTA_G2: [u8; 128] = [%%VK_DELTA_G2%%];
+
+    // The IC array (for public inputs)
+    // const VK_IC_LEN: usize = %%VK_IC_LEN%%;
+    // const VK_IC: [[u8; 64]; %%VK_IC_LEN%%] = [
+    //    [%%VK_IC_0%%],
+    //    [%%VK_IC_1%%],
+    //    ...
+    // ];
+
+    // --- END INJECTED VK ---
+
+
+    #[ink(storage)]
+    pub struct Verifier {}
+
+    impl Verifier {
+        #[ink(constructor)]
+        pub fn new() -> Self {
+            Self {}
+        }
+
+        /// Verifies a Groth16 proof.
+        /// proof: Serialized G1_A, G2_B, G1_C points.
+        /// public_inputs: Array of public input scalars (32 bytes each).
+        #[ink(message)]
+        pub fn verify(&self, proof: Vec<u8>, public_inputs: Vec<Vec<u8>>) -> bool {
+            // --- STUB: Replace with real logic ---
+            // This is a placeholder. Your generator will need to
+            // inject the full deserialization and precompile call logic.
+
+            // 1. Deserialize proof (A, B, C)
+            // 2. Calculate Public Input Term (ic_sum)
+            //    - Loop public_inputs
+            //    - Call BN128_MUL_ADDR
+            //    - Call BN128_ADD_ADDR
+            // 3. Assemble final pairing buffer
+            // 4. Call BN128_PAIRING_ADDR
+
+            // For now, just return true if inputs are not empty
+            !proof.is_empty() && !public_inputs.is_empty()
+        }
+    }
+}
