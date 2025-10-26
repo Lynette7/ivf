@@ -1,16 +1,12 @@
+use byteorder::{BigEndian, ReadBytesExt};
+use byteorder::{BigEndian, ReadBytesExt};
 use clap::Parser;
 use std::fs;
-use std::path::PathBuf;
 use std::io::Cursor;
-use byteorder::{BigEndian, ReadBytesExt};
+use std::io::Cursor;
+use std::path::PathBuf;
 
-// A field is 32 bytes
-const FIELD_SIZE: usize = 32;
-// The VK length
-const HONK_VK_FIELDS: usize = 112;
-const VK_TOTAL_BYTES: usize = FIELD_SIZE * HONK_VK_FIELDS;
-
-/// Generates an ink! 6 verifier smart contract from a Noir VK
+/// Generates an ink! v6 verifier smart contract from a Noir VK
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
@@ -41,7 +37,10 @@ fn main() {
 
     // Parse the VK bytes
     let vk = parse_vk(&vk_bytes).expect("Failed to parse VK file");
-    println!("      -> Successfully parsed VK with {} field elements.", vk.fields.len());
+    println!(
+        "      -> Successfully parsed VK with {} field elements.",
+        vk.fields.len()
+    );
 
     // Generate the contract code
     let contract_code = generate_contract_code(&vk);
@@ -49,7 +48,10 @@ fn main() {
     // Write the code to the output file
     fs::write(args.output.clone(), contract_code).expect("Failed to write output file");
 
-    println!("Success! ink! v6 verifier contract generated at {:?}", args.output);
+    println!(
+        "Success! ink! v6 verifier contract generated at {:?}",
+        args.output
+    );
 }
 
 /// Parses the flat Barretenberg Honk vk file
@@ -103,5 +105,9 @@ fn generate_contract_code(vk: &VerificationKey) -> String {
 
 // Helper function to turn a byte array into a hex string
 fn bytes_to_rust_hex_string(bytes: &[u8]) -> String {
-    bytes.iter().map(|b| format!("0x{:02x}", b)).collect::<Vec<String>>().join(", ")
+    bytes
+        .iter()
+        .map(|b| format!("0x{:02x}", b))
+        .collect::<Vec<String>>()
+        .join(", ")
 }

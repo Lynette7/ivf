@@ -1,0 +1,8 @@
+[package]
+name = "simple_secret"
+type = "bin"
+authors = [""]
+
+[dependencies]
+[prover]
+backend_proving_scheme = "groth16"
