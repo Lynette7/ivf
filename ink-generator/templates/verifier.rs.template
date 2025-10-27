@@ -8,6 +8,9 @@ mod Verifier {
 
     // --- PRECOMPILE ADDRESSES ---
     // These are the EVM-compatible precompile addresses from pallet-revive
+    const SHA256_ADDR: H160 = H160([
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x02,
+    ]);
     const BN128_ADD_ADDR: H160 = H160([
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x06,
     ]);
@@ -18,24 +21,11 @@ mod Verifier {
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x08,
     ]);
 
-    // --- BEGIN INJECTED VK ---
-    // Your generator will replace these placeholders.
-    // G1 points are 64 bytes, G2 are 128 bytes.
-
-    // const VK_ALPHA_G1: [u8; 64] = [%%VK_ALPHA_G1%%];
-    // const VK_BETA_G2: [u8; 128] = [%%VK_BETA_G2%%];
-    // const VK_GAMMA_G2: [u8; 128] = [%%VK_GAMMA_G2%%];
-    // const VK_DELTA_G2: [u8; 128] = [%%VK_DELTA_G2%%];
-
-    // The IC array (for public inputs)
-    // const VK_IC_LEN: usize = %%VK_IC_LEN%%;
-    // const VK_IC: [[u8; 64]; %%VK_IC_LEN%%] = [
-    //    [%%VK_IC_0%%],
-    //    [%%VK_IC_1%%],
-    //    ...
-    // ];
-
-    // --- END INJECTED VK ---
+    // --- INJECTED HONK VERIFICATION KEY ---
+    const VK_LEN: usize = %%VK_LEN%%;
+    const VK: [[u8; 32]; VK_LEN] = [ 
+        %%VK_FIELDS%% 
+    ];
 
 
     #[ink(storage)]
@@ -47,25 +37,58 @@ mod Verifier {
             Self {}
         }
 
-        /// Verifies a Groth16 proof.
-        /// proof: Serialized G1_A, G2_B, G1_C points.
-        /// public_inputs: Array of public input scalars (32 bytes each).
+        /// Verifies an UltraHonk proof.
         #[ink(message)]
         pub fn verify(&self, proof: Vec<u8>, public_inputs: Vec<Vec<u8>>) -> bool {
-            // --- STUB: Replace with real logic ---
-            // This is a placeholder. Your generator will need to
-            // inject the full deserialization and precompile call logic.
 
-            // 1. Deserialize proof (A, B, C)
-            // 2. Calculate Public Input Term (ic_sum)
-            //    - Loop public_inputs
-            //    - Call BN128_MUL_ADDR
-            //    - Call BN128_ADD_ADDR
-            // 3. Assemble final pairing buffer
-            // 4. Call BN128_PAIRING_ADDR
+            // #################################################################
+            // # TODO: PORT THE ULTRAHONK VERIFIER LOGIC
+            // #################################################################
+            
+            true // Placeholder
+        }
 
-            // For now, just return true if inputs are not empty
-            !proof.is_empty() && !public_inputs.is_empty()
+        / #################################################################
+        // # HELPER FUNCTIONS
+        // #################################################################
+
+        /// Calls the SHA256 precompile at 0x02
+        fn sha256_precompile(&self, input: Vec<u8>) -> [u8; 32] {
+            let result = build_call::<DefaultEnvironment>()
+                .call(SHA256_ADDR)
+                .exec_input(ExecutionInput::new(Selector::from([0; 4])).set_input(input))
+                .returns::<Vec<u8>>()
+                .try_invoke();
+            
+            match result {
+                Ok(Ok(hash_vec)) => {
+                    hash_vec.try_into().unwrap_or_default()
+                },
+                _ => [0u8; 32]
+            }
+        }
+        
+        /// Calls the Bn128Add precompile at 0x06
+        /// Input is two G1 points (64 + 64 = 128 bytes)
+        fn ec_add_precompile(&self, input: Vec<u8>) -> [u8; 64] {
+            // TODO
+            [0u8; 64] // Placeholder
+        }
+        
+        /// Calls the Bn128Mul precompile at 0x07
+        /// Input is one G1 point and one scalar (64 + 32 = 96 bytes)
+        fn ec_mul_precompile(&self, input: Vec<u8>) -> [u8; 64] {
+            // TODO
+            [0u8; 64] // Placeholder
+        }
+
+        /// Calls the Bn128Pairing precompile at 0x08
+        /// Input is a list of (G1, G2) pairs. (64 + 128) * N bytes.
+        fn ec_pairing_precompile(&self, input: Vec<u8>) -> bool {
+            // TODO
+            // The precompile returns a 32-byte word.
+            // If it's all zeros, it's false. If it ends in 0x01, it's true.
+            true // Placeholder
         }
     }
 }
