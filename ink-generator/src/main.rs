@@ -1,10 +1,14 @@
-use byteorder::{BigEndian, ReadBytesExt};
-use byteorder::{BigEndian, ReadBytesExt};
 use clap::Parser;
 use std::fs;
-use std::io::Cursor;
-use std::io::Cursor;
 use std::path::PathBuf;
+use std::io::Cursor;
+use byteorder::{BigEndian, ReadBytesExt};
+
+// A field is 32 bytes
+const FIELD_SIZE: usize = 32;
+// The VK length
+const HONK_VK_FIELDS: usize = 112;
+const VK_TOTAL_BYTES: usize = FIELD_SIZE * HONK_VK_FIELDS;
 
 /// Generates an ink! v6 verifier smart contract from a Noir VK
 #[derive(Parser, Debug)]
@@ -33,7 +37,7 @@ fn main() {
 
     // Read the vk file
     let vk_bytes = fs::read(args.vk).expect("Failed to read VK file");
-    println!("      ->Read {} bytes.", vk_bytes.len());
+    println!("      -> Read {} bytes.", vk_bytes.len());
 
     // Parse the VK bytes
     let vk = parse_vk(&vk_bytes).expect("Failed to parse VK file");
