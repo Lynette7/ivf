@@ -1,8 +1,7 @@
 use clap::Parser;
 use std::fs;
 use std::path::PathBuf;
-use std::io::Cursor;
-use byteorder::{BigEndian, ReadBytesExt};
+use std::io::{Error, ErrorKind};
 
 // A field is 32 bytes
 const FIELD_SIZE: usize = 32;
@@ -59,10 +58,10 @@ fn main() {
 }
 
 /// Parses the flat Barretenberg Honk vk file
-fn parse_vk(vk_bytes: &[u8]) -> Result<VerificationKey, io::Error> {
+fn parse_vk(vk_bytes: &[u8]) -> Result<VerificationKey, Error> {
     if vk_bytes.len() != VK_TOTAL_BYTES {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidData,
+        return Err(Error::new(
+            ErrorKind::InvalidData,
             format!(
                 "Invalid VK file size. Expected {} bytes, but got {}",
                 VK_TOTAL_BYTES,

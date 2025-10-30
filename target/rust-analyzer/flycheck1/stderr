@@ -1,0 +1,5 @@
+    Blocking waiting for file lock on package cache
+    Updating crates.io index
+error: no matching package named `ark-plonk` found
+location searched: crates.io index
+required by package `ink_verifier v0.1.0 (/Users/lynettemwangi/Developer/ivf/ink_verifier)`
