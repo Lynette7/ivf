@@ -4,3 +4,5 @@ type = "bin"
 authors = [""]
 
 [dependencies]
+[prover]
+backend_proving_scheme = "ultrahonk"

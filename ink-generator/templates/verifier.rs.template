@@ -5,6 +5,7 @@ mod Verifier {
     use ink::env::call::{build_call, ExecutionInput, Selector};
     use ink::prelude::vec::Vec;
     use ink::primitives::H160;
+    use ink::env::DefaultEnvironment;
 
     // --- PRECOMPILE ADDRESSES ---
     // These are the EVM-compatible precompile addresses from pallet-revive
@@ -48,7 +49,7 @@ mod Verifier {
             true // Placeholder
         }
 
-        / #################################################################
+        // #################################################################
         // # HELPER FUNCTIONS
         // #################################################################
 
@@ -71,24 +72,48 @@ mod Verifier {
         /// Calls the Bn128Add precompile at 0x06
         /// Input is two G1 points (64 + 64 = 128 bytes)
         fn ec_add_precompile(&self, input: Vec<u8>) -> [u8; 64] {
-            // TODO
-            [0u8; 64] // Placeholder
+            let result = build_call::<DefaultEnvironment>().call(BN128_ADD_ADDR).exec_input(ExecutionInput::new(Selector::from([0; 4])).set_input(input)).returns::<Vec<u8>>().try_invoke();
+            match result{
+                Ok(Ok(result_vec)) => {
+                    result_vec.try_into().unwrap_or_default()
+                },
+                _ => [0u8; 64]
+            }
+            
         }
         
         /// Calls the Bn128Mul precompile at 0x07
         /// Input is one G1 point and one scalar (64 + 32 = 96 bytes)
         fn ec_mul_precompile(&self, input: Vec<u8>) -> [u8; 64] {
             // TODO
-            [0u8; 64] // Placeholder
+            let result = build_call::<DefaultEnvironment>().call(BN128_MUL_ADDR).exec_input(ExecutionInput::new(Selector::from([0; 4])).set_input(input)).returns::<Vec<u8>>().try_invoke();
+            match result{
+                Ok(Ok(result_vec)) => {
+                    result_vec.try_into().unwrap_or_default()
+                },
+                _ => [0u8; 64]
+            }
+           
         }
 
         /// Calls the Bn128Pairing precompile at 0x08
         /// Input is a list of (G1, G2) pairs. (64 + 128) * N bytes.
         fn ec_pairing_precompile(&self, input: Vec<u8>) -> bool {
-            // TODO
-            // The precompile returns a 32-byte word.
-            // If it's all zeros, it's false. If it ends in 0x01, it's true.
-            true // Placeholder
+            let result = build_call::<DefaultEnvironment>()
+                .call(BN128_PAIRING_ADDR)
+                .exec_input(ExecutionInput::new(Selector::from([0; 4])).push_arg(&input))
+                .returns::<Vec<u8>>()
+                .try_invoke();
+                match result{
+                    Ok(Ok(result_vec)) => {
+                        if result_vec.len() == 32 {
+                        result_vec[31] == 1
+                    } else {
+                        false
+                    }
+                    },
+                    _ => false
+                }
         }
     }
 }

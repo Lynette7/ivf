@@ -1,12 +1,12 @@
 use clap::Parser;
 use std::fs;
-use std::path::PathBuf;
 use std::io::{Error, ErrorKind};
+use std::path::PathBuf;
 
 // A field is 32 bytes
 const FIELD_SIZE: usize = 32;
-// The VK length
-const HONK_VK_FIELDS: usize = 112;
+// The VK length (UltraHonk has 128 field elements)
+const HONK_VK_FIELDS: usize = 128;
 const VK_TOTAL_BYTES: usize = FIELD_SIZE * HONK_VK_FIELDS;
 
 /// Generates an ink! v6 verifier smart contract from a Noir VK
