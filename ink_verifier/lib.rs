@@ -23,9 +23,11 @@ mod verifier {
     impl Verifier {
         #[ink(constructor)]
         pub fn new(vk_bytes: Vec<u8>) -> Self {
-            Self {
-                vk_bytes: Lazy::new(vk_bytes),
-            }
+            let mut instance = Self {
+                vk_bytes: Lazy::new(),
+            };
+            instance.vk_bytes.set(&vk_bytes);
+            instance
         }
 
         /// Verifies a Plonk proof
