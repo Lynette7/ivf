@@ -6,6 +6,8 @@ use primitive_types::U256;
 // Type alias for field elements
 pub type Fr = U256;
 
+// Field element size
+const FIELD_SIZE: usize = 32;
 // From: uint256 constant N = 32; [cite: 1]
 pub const N: u32 = 32;
 // From: uint256 constant LOG_N = 5; [cite: 1]
@@ -65,4 +67,63 @@ pub struct VerificationKey {
     pub id4: G1Point,
     pub lagrange_first: G1Point,
     pub lagrange_last: G1Point,
+}
+
+/// Parse VK bytes into structured VerificationKey
+pub fn parse_vk_structured(vk_bytes: &[u8]) -> Result<VerificationKey, String> {
+    if vk_bytes.len() != 128 * FIELD_SIZE {
+        return Err(format!("Invalid VK size: {}", vk_bytes.len()));
+    }
+
+    let mut offset = 0;
+
+    // Helper to read next field element
+    let mut read_fr = || -> U256 {
+        let bytes: [u8; 32] = vk_bytes[offset..offset + 32]
+            .try_into()
+            .expect("slice with incorrect length");
+        offset += 32;
+        U256::from_big_endian(&bytes)
+    };
+
+    // Helper to read next G1 point
+    let mut read_g1 = || -> G1Point {
+        G1Point {
+            x: read_fr(),
+            y: read_fr(),
+        }
+    };
+
+    Ok(VerificationKey {
+        circuit_size: read_fr(),
+        log_circuit_size: read_fr(),
+        public_inputs_size: read_fr(),
+        ql: read_g1(),
+        qr: read_g1(),
+        qo: read_g1(),
+        q4: read_g1(),
+        qm: read_g1(),
+        qc: read_g1(),
+        q_arith: read_g1(),
+        q_delta_range: read_g1(),
+        q_elliptic: read_g1(),
+        q_aux: read_g1(),
+        q_lookup: read_g1(),
+        q_poseidon2_external: read_g1(),
+        q_poseidon2_internal: read_g1(),
+        s1: read_g1(),
+        s2: read_g1(),
+        s3: read_g1(),
+        s4: read_g1(),
+        t1: read_g1(),
+        t2: read_g1(),
+        t3: read_g1(),
+        t4: read_g1(),
+        id1: read_g1(),
+        id2: read_g1(),
+        id3: read_g1(),
+        id4: read_g1(),
+        lagrange_first: read_g1(),
+        lagrange_last: read_g1(),
+    })
 }

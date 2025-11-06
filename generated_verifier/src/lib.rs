@@ -2,7 +2,7 @@
 mod field;
 mod honk_structs;
 #[ink::contract]
-mod Verifier {
+mod verifier {
     use crate::field::{add_mod, from_bytes_be, mul_mod, sub_mod, to_bytes_be, Fr, MODULUS};
     use crate::honk_structs::{G1Point, G1ProofPoint, VerificationKey};
     use ink::env::call::{build_call, ExecutionInput, Selector};
