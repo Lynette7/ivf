@@ -678,6 +678,60 @@ mod verifier {
         pub fn new() -> Self {
             Self {}
         }
+        /// We need to reconstruct the VerificationKey from the flat VK array
+        /// The VK array contains 128 field elements (32 bytes each)
+        /// Layout: [metadata fields, then G1 points as (x, y) pairs]
+        fn reconstruct_vk(&self) -> VerificationKey {
+            // Metadata fields (first 4 elements)
+            let circuit_size = self.vk_field_to_fr(&VK[0]);
+            let log_circuit_size = self.vk_field_to_fr(&VK[1]);
+            let public_inputs_size = self.vk_field_to_fr(&VK[2]);
+
+            // Helper to extract a G1Point from VK array starting at index
+            let get_g1_point = |idx: usize| -> G1Point {
+                G1Point {
+                    x: self.vk_field_to_fr(&VK[idx]),
+                    y: self.vk_field_to_fr(&VK[idx + 1]),
+                }
+            };
+
+            // Starting index for G1 points (after 4 metadata fields)
+            let mut idx = 4;
+
+            // Extract all G1 points in order
+            VerificationKey {
+                circuit_size,
+                log_circuit_size,
+                public_inputs_size,
+                ql: get_g1_point(idx),
+                qr: get_g1_point(idx + 2),
+                qo: get_g1_point(idx + 4),
+                q4: get_g1_point(idx + 6),
+                qm: get_g1_point(idx + 8),
+                qc: get_g1_point(idx + 10),
+                q_arith: get_g1_point(idx + 12),
+                q_delta_range: get_g1_point(idx + 14),
+                q_elliptic: get_g1_point(idx + 16),
+                q_aux: get_g1_point(idx + 18),
+                q_lookup: get_g1_point(idx + 20),
+                q_poseidon2_external: get_g1_point(idx + 22),
+                q_poseidon2_internal: get_g1_point(idx + 24),
+                s1: get_g1_point(idx + 26),
+                s2: get_g1_point(idx + 28),
+                s3: get_g1_point(idx + 30),
+                s4: get_g1_point(idx + 32),
+                t1: get_g1_point(idx + 34),
+                t2: get_g1_point(idx + 36),
+                t3: get_g1_point(idx + 38),
+                t4: get_g1_point(idx + 40),
+                id1: get_g1_point(idx + 42),
+                id2: get_g1_point(idx + 44),
+                id3: get_g1_point(idx + 46),
+                id4: get_g1_point(idx + 48),
+                lagrange_first: get_g1_point(idx + 50),
+                lagrange_last: get_g1_point(idx + 52),
+            }
+        }
 
         /// Verifies an UltraHonk proof.
         #[ink(message)]
