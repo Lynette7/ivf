@@ -1,12 +1,14 @@
 #![cfg_attr(not(feature = "std"), no_std, no_main)]
 mod field;
 mod honk_structs;
-mod transcript;
+mod proof;
 mod relations;
+mod transcript;
 #[ink::contract]
 mod verifier {
     use crate::field::{add_mod, from_bytes_be, mul_mod, sub_mod, to_bytes_be, Fr, MODULUS};
     use crate::honk_structs::{G1Point, G1ProofPoint, VerificationKey};
+    use crate::proof::Proof;
     use ink::env::call::{build_call, ExecutionInput, Selector};
     use ink::env::DefaultEnvironment;
     use ink::prelude::vec::Vec;
