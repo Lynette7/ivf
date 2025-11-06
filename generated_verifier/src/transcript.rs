@@ -5,6 +5,36 @@ use primitive_types::U256;
 use crate::field::Fr;
 use crate::honk_structs::*;
 
+// Circuit constants
+const CONST_PROOF_SIZE_LOG_N: usize = 28;
+const NUMBER_OF_SUBRELATIONS: usize = 26;
+const BATCHED_RELATION_PARTIAL_LENGTH: usize = 8;
+const NUMBER_OF_ENTITIES: usize = 40;
+const NUMBER_UNSHIFTED: usize = 35;
+const NUMBER_TO_BE_SHIFTED: usize = 5;
+const NUMBER_OF_ALPHAS: usize = 25;
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
+pub struct Proof {
+    pub w1: G1ProofPoint,
+    pub w2: G1ProofPoint,
+    pub w3: G1ProofPoint,
+    pub w4: G1ProofPoint,
+    pub z_perm: G1ProofPoint,
+    pub lookup_read_counts: G1ProofPoint,
+    pub lookup_read_tags: G1ProofPoint,
+    pub lookup_inverses: G1ProofPoint,
+    pub sumcheck_univariates: [[Fr; BATCHED_RELATION_PARTIAL_LENGTH]; CONST_PROOF_SIZE_LOG_N],
+    pub sumcheck_evaluations: [Fr; NUMBER_OF_ENTITIES],
+    pub gemini_fold_comms: [G1ProofPoint; CONST_PROOF_SIZE_LOG_N - 1],
+    pub gemini_a_evaluations: [Fr; CONST_PROOF_SIZE_LOG_N],
+    pub shplonk_q: G1ProofPoint,
+    pub kzg_quotient: G1ProofPoint,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
 pub struct Transcript {
     pub relation_parameters: RelationParameters,
     pub alphas: [Fr; NUMBER_OF_ALPHAS as usize],
@@ -16,6 +46,8 @@ pub struct Transcript {
     pub shplonk_z: Fr,
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
 pub struct RelationParameters {
     pub eta: Fr,
     pub eta_two: Fr,

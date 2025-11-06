@@ -1,6 +1,8 @@
 #![cfg_attr(not(feature = "std"), no_std, no_main)]
 mod field;
 mod honk_structs;
+mod transcript;
+mod relations;
 #[ink::contract]
 mod verifier {
     use crate::field::{add_mod, from_bytes_be, mul_mod, sub_mod, to_bytes_be, Fr, MODULUS};
@@ -678,6 +680,7 @@ mod verifier {
         pub fn new() -> Self {
             Self {}
         }
+
         /// We need to reconstruct the VerificationKey from the flat VK array
         /// The VK array contains 128 field elements (32 bytes each)
         /// Layout: [metadata fields, then G1 points as (x, y) pairs]
