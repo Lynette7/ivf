@@ -854,9 +854,7 @@ mod verifier {
             // Minimum expected size: ~14080 bytes
             // 8 G1ProofPoints
             const MIN_PROOF_SIZE: usize = 8 * 128 + 
-          
                 28 * 8 * 32 + 
-               
                 40 * 32 + 
                 27 * 128 + 
                 28 * 32 + 
