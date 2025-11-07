@@ -8,7 +8,7 @@ mod transcript;
 mod verifier {
     use crate::field::{add_mod, from_bytes_be, mul_mod, sub_mod, to_bytes_be, Fr, MODULUS};
     use crate::honk_structs::{G1Point, G1ProofPoint, VerificationKey};
-    use crate::proof::Proof;
+    use crate::transcript::{Proof, Transcript, RelationParameters};
     use ink::env::call::{build_call, ExecutionInput, Selector};
     use ink::env::DefaultEnvironment;
     use ink::prelude::vec::Vec;
@@ -840,16 +840,30 @@ mod verifier {
                 _ => false,
             }
         }
-        /// This parses proof bytes into Proof structure
-        /// Format: [G1 commitments (64 bytes each),
-        /// field evaluations (32 bytes each), opening proof (128 bytes)]
+               /// Parses UltraHonk proof bytes into Proof structure
+        /// Format:
+        /// - 8 G1ProofPoints (w1, w2, w3, w4, z_perm, lookup_read_counts, lookup_read_tags, lookup_inverses): 8 * 128 = 1024 bytes
+        /// - sumcheck_univariates: 28 rounds * 8 field elements * 32 bytes = 7168 bytes
+        /// - sumcheck_evaluations: 40 field elements * 32 bytes = 1280 bytes
+        /// - gemini_fold_comms: 27 G1ProofPoints * 128 bytes = 3456 bytes
+        /// - gemini_a_evaluations: 28 field elements * 32 bytes = 896 bytes
+        /// - shplonk_q: 1 G1ProofPoint * 128 bytes = 128 bytes
+        /// - kzg_quotient: 1 G1ProofPoint * 128 bytes = 128 bytes
+        /// Total: ~14080 bytes
         fn parse_proof(&self, proof_bytes: &[u8]) -> Option<Proof> {
-            // Minimum expected size:
-            // 7 G1 points * 64 bytes = 448 bytes
-            // 7 field elements * 32 bytes = 224 bytes
-            // 1 G1ProofPoint * 128 bytes = 128 bytes
-            // Total: ~800 bytes minimum
-            if proof_bytes.len() < 800 {
+            // Minimum expected size: ~14080 bytes
+            // 8 G1ProofPoints
+            const MIN_PROOF_SIZE: usize = 8 * 128 + 
+          
+                28 * 8 * 32 + 
+               
+                40 * 32 + 
+                27 * 128 + 
+                28 * 32 + 
+                128 + 
+                128;
+            
+            if proof_bytes.len() < MIN_PROOF_SIZE {
                 return None;
             }
 
@@ -865,16 +879,6 @@ mod verifier {
                 Some(from_bytes_be(&bytes))
             };
 
-            // Helper to read next 64 bytes as G1Point
-            let mut read_g1 = || -> Option<G1Point> {
-                if offset + 64 > proof_bytes.len() {
-                    return None;
-                }
-                let point = self.bytes_to_g1_point(&proof_bytes[offset..offset + 64])?;
-                offset += 64;
-                Some(point)
-            };
-
             // Helper to read G1ProofPoint (128 bytes: x_0, x_1, y_0, y_1)
             let mut read_g1_proof_point = || -> Option<G1ProofPoint> {
                 if offset + 128 > proof_bytes.len() {
@@ -888,28 +892,63 @@ mod verifier {
                 })
             };
 
+            // Read 8 G1ProofPoints: witness commitments and lookup commitments
+            let w1 = read_g1_proof_point()?;
+            let w2 = read_g1_proof_point()?;
+            let w3 = read_g1_proof_point()?;
+            let w4 = read_g1_proof_point()?;
+            let z_perm = read_g1_proof_point()?;
+            let lookup_read_counts = read_g1_proof_point()?;
+            let lookup_read_tags = read_g1_proof_point()?;
+            let lookup_inverses = read_g1_proof_point()?;
+
+            // Read sumcheck_univariates: 28 rounds, each with 8 field elements
+            let mut sumcheck_univariates = [[Fr::zero(); BATCHED_RELATION_PARTIAL_LENGTH]; CONST_PROOF_SIZE_LOG_N];
+            for round in 0..CONST_PROOF_SIZE_LOG_N {
+                for j in 0..BATCHED_RELATION_PARTIAL_LENGTH {
+                    sumcheck_univariates[round][j] = read_fr()?;
+                }
+            }
+
+            // Read sumcheck_evaluations: 40 field elements
+            let mut sumcheck_evaluations = [Fr::zero(); NUMBER_OF_ENTITIES];
+            for i in 0..NUMBER_OF_ENTITIES {
+                sumcheck_evaluations[i] = read_fr()?;
+            }
+
+            // Read gemini_fold_comms: 27 G1ProofPoints
+            let mut gemini_fold_comms = [G1ProofPoint::default(); CONST_PROOF_SIZE_LOG_N - 1];
+            for i in 0..(CONST_PROOF_SIZE_LOG_N - 1) {
+                gemini_fold_comms[i] = read_g1_proof_point()?;
+            }
+
+            // Read gemini_a_evaluations: 28 field elements
+            let mut gemini_a_evaluations = [Fr::zero(); CONST_PROOF_SIZE_LOG_N];
+            for i in 0..CONST_PROOF_SIZE_LOG_N {
+                gemini_a_evaluations[i] = read_fr()?;
+            }
+
+            // Read shplonk_q: 1 G1ProofPoint
+            let shplonk_q = read_g1_proof_point()?;
+
+            // Read kzg_quotient: 1 G1ProofPoint
+            let kzg_quotient = read_g1_proof_point()?;
+
             Some(Proof {
-                // Witness commitments (4 G1 points)
-                w_l: read_g1()?,
-                w_r: read_g1()?,
-                w_o: read_g1()?,
-                w_4: read_g1()?,
-                // Permutation commitment (1 G1 point)
-                z_perm: read_g1()?,
-                // Quotient commitments (3 G1 points)
-                t_lo: read_g1()?,
-                t_mid: read_g1()?,
-                t_hi: read_g1()?,
-                // Evaluations (7 field elements)
-                a_eval: read_fr()?,
-                b_eval: read_fr()?,
-                c_eval: read_fr()?,
-                d_eval: read_fr()?,
-                s_eval: read_fr()?,
-                z_eval: read_fr()?,
-                z_lookup_eval: read_fr()?,
-                // Opening proof (1 G1ProofPoint)
-                opening_proof: read_g1_proof_point()?,
+                w1,
+                w2,
+                w3,
+                w4,
+                z_perm,
+                lookup_read_counts,
+                lookup_read_tags,
+                lookup_inverses,
+                sumcheck_univariates,
+                sumcheck_evaluations,
+                gemini_fold_comms,
+                gemini_a_evaluations,
+                shplonk_q,
+                kzg_quotient,
             })
         }
     }
