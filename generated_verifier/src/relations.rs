@@ -1,6 +1,6 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use crate::field::*;
+use crate::field::{Fr, add_mod, sub_mod, mul_mod, pow_mod, neg_mod};
 use crate::honk_structs::*;
 use crate::transcript::RelationParameters;
 use primitive_types::U256;

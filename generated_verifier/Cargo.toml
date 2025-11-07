@@ -6,7 +6,8 @@ edition = "2021"
 
 [dependencies]
 ink = { version = "6.0.0-alpha", default-features = false, features = ["unstable-hostfn"] }
-primitive-types = { version = "0.12.2", default-features = false, features = ["scale"] }
+primitive-types = { version = "0.12.2", default-features = false }
+scale-info = { version = "2.11", default-features = false, features = ["derive"] }
 
 [dev-dependencies]
 ink_e2e = "6.0.0-beta"
