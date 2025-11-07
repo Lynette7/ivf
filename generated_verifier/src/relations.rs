@@ -1,6 +1,7 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use crate::field::*;
+use crate::transcript::*;
 use crate::honk_structs::*;
 use primitive_types::U256;
 

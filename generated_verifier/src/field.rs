@@ -102,8 +102,9 @@ pub fn from_bytes_be(bytes: &[u8; 32]) -> Fr {
 
 /// Convert to bytes (big-endian)
 pub fn to_bytes_be(value: Fr) -> [u8; 32] {
+    let vec_bytes = value.to_big_endian();
     let mut bytes = [0u8; 32];
-    value.to_big_endian(&mut bytes);
+    bytes.copy_from_slice(&vec_bytes);
     bytes
 }
 

@@ -801,7 +801,7 @@ mod verifier {
                 .returns::<Vec<u8>>()
                 .try_invoke();
             match result {
-                Ok(Ok(result_vec)) => result_vec.try_into().unwrap_or_default(),
+                Ok(Ok(result_vec)) => result_vec.try_into().unwrap_or([0u8; 64]),
                 _ => [0u8; 64],
             }
         }
@@ -816,7 +816,7 @@ mod verifier {
                 .returns::<Vec<u8>>()
                 .try_invoke();
             match result {
-                Ok(Ok(result_vec)) => result_vec.try_into().unwrap_or_default(),
+                Ok(Ok(result_vec)) => result_vec.try_into().unwrap_or([0u8; 64]),
                 _ => [0u8; 64],
             }
         }
