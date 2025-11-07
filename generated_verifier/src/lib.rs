@@ -7,6 +7,7 @@ mod transcript;
 #[ink::contract]
 mod verifier {
     use crate::field::{add_mod, from_bytes_be, mul_mod, sub_mod, to_bytes_be, Fr, MODULUS};
+    use primitive_types::U256;
     use crate::honk_structs::{G1Point, G1ProofPoint, VerificationKey};
     use crate::transcript::{Proof, Transcript, RelationParameters};
     use ink::env::call::{build_call, ExecutionInput, Selector};
@@ -28,7 +29,11 @@ mod verifier {
     const BN128_PAIRING_ADDR: H160 = H160([
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x08,
     ]);
-
+    // --- ULTRAHONK PROOF CONSTANTS ---
+    const CONST_PROOF_SIZE_LOG_N: usize = 28;
+    const BATCHED_RELATION_PARTIAL_LENGTH: usize = 8;
+    const NUMBER_OF_ENTITIES: usize = 40;
+    const NUMBER_OF_ALPHAS: usize = 25;
     // --- INJECTED HONK VERIFICATION KEY ---
     const VK_LEN: usize = 128;
     const VK: [[u8; 32]; VK_LEN] = [
@@ -782,7 +787,7 @@ mod verifier {
         fn sha256_precompile(&self, input: Vec<u8>) -> [u8; 32] {
             let result = build_call::<DefaultEnvironment>()
                 .call(SHA256_ADDR)
-                .exec_input(ExecutionInput::new(Selector::from([0; 4])).set_input(input))
+                .exec_input(ExecutionInput::new(Selector::from([0; 4])).push_arg(&input))
                 .returns::<Vec<u8>>()
                 .try_invoke();
 
@@ -797,11 +802,17 @@ mod verifier {
         fn ec_add_precompile(&self, input: Vec<u8>) -> [u8; 64] {
             let result = build_call::<DefaultEnvironment>()
                 .call(BN128_ADD_ADDR)
-                .exec_input(ExecutionInput::new(Selector::from([0; 4])).set_input(input))
+                .exec_input(ExecutionInput::new(Selector::from([0; 4])).push_arg(&input))
                 .returns::<Vec<u8>>()
                 .try_invoke();
             match result {
-                Ok(Ok(result_vec)) => result_vec.try_into().unwrap_or([0u8; 64]),
+                Ok(Ok(result_vec)) => {
+                    let mut arr = [0u8; 64];
+                    if result_vec.len() >= 64 {
+                        arr.copy_from_slice(&result_vec[..64]);
+                    }
+                    arr
+                }
                 _ => [0u8; 64],
             }
         }
@@ -812,11 +823,17 @@ mod verifier {
             // TODO
             let result = build_call::<DefaultEnvironment>()
                 .call(BN128_MUL_ADDR)
-                .exec_input(ExecutionInput::new(Selector::from([0; 4])).set_input(input))
+                .exec_input(ExecutionInput::new(Selector::from([0; 4])).push_arg(&input))
                 .returns::<Vec<u8>>()
                 .try_invoke();
             match result {
-                Ok(Ok(result_vec)) => result_vec.try_into().unwrap_or([0u8; 64]),
+                Ok(Ok(result_vec)) => {
+                    let mut arr = [0u8; 64];
+                    if result_vec.len() >= 64 {
+                        arr.copy_from_slice(&result_vec[..64]);
+                    }
+                    arr
+                }
                 _ => [0u8; 64],
             }
         }
@@ -868,69 +885,70 @@ mod verifier {
             let mut offset = 0;
 
             // Helper to read next 32 bytes as Fr
-            let mut read_fr = || -> Option<Fr> {
-                if offset + 32 > proof_bytes.len() {
+            let mut read_fr = |offset: &mut usize| -> Option<Fr> {
+                if *offset + 32 > proof_bytes.len() {
                     return None;
                 }
-                let bytes: [u8; 32] = proof_bytes[offset..offset + 32].try_into().ok()?;
-                offset += 32;
+                let bytes: [u8; 32] = proof_bytes[*offset..*offset + 32].try_into().ok()?;
+                *offset += 32;
                 Some(from_bytes_be(&bytes))
             };
 
             // Helper to read G1ProofPoint (128 bytes: x_0, x_1, y_0, y_1)
-            let mut read_g1_proof_point = || -> Option<G1ProofPoint> {
-                if offset + 128 > proof_bytes.len() {
+            let mut read_g1_proof_point = |offset: &mut usize| -> Option<G1ProofPoint> {
+                if *offset + 128 > proof_bytes.len() {
                     return None;
                 }
                 Some(G1ProofPoint {
-                    x_0: read_fr()?,
-                    x_1: read_fr()?,
-                    y_0: read_fr()?,
-                    y_1: read_fr()?,
+                    x_0: read_fr(offset)?,
+                    x_1: read_fr(offset)?,
+                    y_0: read_fr(offset)?,
+                    y_1: read_fr(offset)?,
                 })
             };
 
             // Read 8 G1ProofPoints: witness commitments and lookup commitments
-            let w1 = read_g1_proof_point()?;
-            let w2 = read_g1_proof_point()?;
-            let w3 = read_g1_proof_point()?;
-            let w4 = read_g1_proof_point()?;
-            let z_perm = read_g1_proof_point()?;
-            let lookup_read_counts = read_g1_proof_point()?;
-            let lookup_read_tags = read_g1_proof_point()?;
-            let lookup_inverses = read_g1_proof_point()?;
+            let w1 = read_g1_proof_point(&mut offset)?;
+            let w2 = read_g1_proof_point(&mut offset)?;
+            let w3 = read_g1_proof_point(&mut offset)?;
+            let w4 = read_g1_proof_point(&mut offset)?;
+            let z_perm = read_g1_proof_point(&mut offset)?;
+            let lookup_read_counts = read_g1_proof_point(&mut offset)?;
+            let lookup_read_tags = read_g1_proof_point(&mut offset)?;
+            let lookup_inverses = read_g1_proof_point(&mut offset)?;
 
             // Read sumcheck_univariates: 28 rounds, each with 8 field elements
-            let mut sumcheck_univariates = [[Fr::zero(); BATCHED_RELATION_PARTIAL_LENGTH]; CONST_PROOF_SIZE_LOG_N];
+let mut sumcheck_univariates = [[U256::zero(); BATCHED_RELATION_PARTIAL_LENGTH]; CONST_PROOF_SIZE_LOG_N];
+            
             for round in 0..CONST_PROOF_SIZE_LOG_N {
                 for j in 0..BATCHED_RELATION_PARTIAL_LENGTH {
-                    sumcheck_univariates[round][j] = read_fr()?;
+                    sumcheck_univariates[round][j] = read_fr(&mut offset)?;
                 }
             }
 
             // Read sumcheck_evaluations: 40 field elements
-            let mut sumcheck_evaluations = [Fr::zero(); NUMBER_OF_ENTITIES];
+            let mut sumcheck_evaluations = [U256::zero(); NUMBER_OF_ENTITIES];
             for i in 0..NUMBER_OF_ENTITIES {
-                sumcheck_evaluations[i] = read_fr()?;
+                sumcheck_evaluations[i] = read_fr(&mut offset)?;
             }
 
             // Read gemini_fold_comms: 27 G1ProofPoints
             let mut gemini_fold_comms = [G1ProofPoint::default(); CONST_PROOF_SIZE_LOG_N - 1];
             for i in 0..(CONST_PROOF_SIZE_LOG_N - 1) {
-                gemini_fold_comms[i] = read_g1_proof_point()?;
+                gemini_fold_comms[i] = read_g1_proof_point(&mut offset)?;
             }
 
             // Read gemini_a_evaluations: 28 field elements
-            let mut gemini_a_evaluations = [Fr::zero(); CONST_PROOF_SIZE_LOG_N];
+            let mut gemini_a_evaluations = [U256::zero(); CONST_PROOF_SIZE_LOG_N];
             for i in 0..CONST_PROOF_SIZE_LOG_N {
-                gemini_a_evaluations[i] = read_fr()?;
+                gemini_a_evaluations[i] = read_fr(&mut offset)?;
             }
 
             // Read shplonk_q: 1 G1ProofPoint
-            let shplonk_q = read_g1_proof_point()?;
+            let shplonk_q = read_g1_proof_point(&mut offset)?;
 
             // Read kzg_quotient: 1 G1ProofPoint
-            let kzg_quotient = read_g1_proof_point()?;
+            let kzg_quotient = read_g1_proof_point(&mut offset)?;
 
             Some(Proof {
                 w1,

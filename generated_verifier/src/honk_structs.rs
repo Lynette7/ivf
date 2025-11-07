@@ -17,7 +17,6 @@ pub const NUMBER_OF_PUBLIC_INPUTS: u32 = 4;
 
 // From: struct Honk.G1Point [cite: 51]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-#[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
 pub struct G1Point {
     pub x: Fr,
     pub y: Fr,
@@ -25,7 +24,6 @@ pub struct G1Point {
 
 // From: struct Honk.G1ProofPoint [cite: 52]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-#[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
 pub struct G1ProofPoint {
     pub x_0: Fr,
     pub x_1: Fr,
@@ -35,7 +33,6 @@ pub struct G1ProofPoint {
 
 // From: struct Honk.VerificationKey [cite: 53-63]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-#[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
 pub struct VerificationKey {
     pub circuit_size: Fr,
     pub log_circuit_size: Fr,
@@ -78,19 +75,19 @@ pub fn parse_vk_structured(vk_bytes: &[u8]) -> Result<VerificationKey, String> {
     let mut offset = 0;
 
     // Helper to read next field element
-    let mut read_fr = || -> U256 {
-        let bytes: [u8; 32] = vk_bytes[offset..offset + 32]
+    let mut read_fr = |offset: &mut usize| -> U256 {
+        let bytes: [u8; 32] = vk_bytes[*offset..*offset + 32]
             .try_into()
             .expect("slice with incorrect length");
-        offset += 32;
+        *offset += 32;
         U256::from_big_endian(&bytes)
     };
 
     // Helper to read next G1 point
-    let read_g1 = |read_fr: &mut dyn FnMut() -> U256| -> G1Point {
+    let mut read_g1 = || -> G1Point {
         G1Point {
-            x: read_fr(),
-            y: read_fr(),
+            x: read_fr(offset),
+            y: read_fr(offset),
         }
     };
 
@@ -98,32 +95,32 @@ pub fn parse_vk_structured(vk_bytes: &[u8]) -> Result<VerificationKey, String> {
         circuit_size: read_fr(),
         log_circuit_size: read_fr(),
         public_inputs_size: read_fr(),
-        ql: read_g1(&mut read_fr),
-        qr: read_g1(&mut read_fr),
-        qo: read_g1(&mut read_fr),
-        q4: read_g1(&mut read_fr),
-        qm: read_g1(&mut read_fr),
-        qc: read_g1(&mut read_fr),
-        q_arith: read_g1(&mut read_fr),
-        q_delta_range: read_g1(&mut read_fr),
-        q_elliptic: read_g1(&mut read_fr),
-        q_aux: read_g1(&mut read_fr),
-        q_lookup: read_g1(&mut read_fr),
-        q_poseidon2_external: read_g1(&mut read_fr),
-        q_poseidon2_internal: read_g1(&mut read_fr),
-        s1: read_g1(&mut read_fr),
-        s2: read_g1(&mut read_fr),
-        s3: read_g1(&mut read_fr),
-        s4: read_g1(&mut read_fr),
-        t1: read_g1(&mut read_fr),
-        t2: read_g1(&mut read_fr),
-        t3: read_g1(&mut read_fr),
-        t4: read_g1(&mut read_fr),
-        id1: read_g1(&mut read_fr),
-        id2: read_g1(&mut read_fr),
-        id3: read_g1(&mut read_fr),
-        id4: read_g1(&mut read_fr),
-        lagrange_first: read_g1(&mut read_fr),
-        lagrange_last: read_g1(&mut read_fr),
+        ql: read_g1(),
+        qr: read_g1(),
+        qo: read_g1(),
+        q4: read_g1(),
+        qm: read_g1(),
+        qc: read_g1(),
+        q_arith: read_g1(),
+        q_delta_range: read_g1(),
+        q_elliptic: read_g1(),
+        q_aux: read_g1(),
+        q_lookup: read_g1(),
+        q_poseidon2_external: read_g1(),
+        q_poseidon2_internal: read_g1(),
+        s1: read_g1(),
+        s2: read_g1(),
+        s3: read_g1(),
+        s4: read_g1(),
+        t1: read_g1(),
+        t2: read_g1(),
+        t3: read_g1(),
+        t4: read_g1(),
+        id1: read_g1(),
+        id2: read_g1(),
+        id3: read_g1(),
+        id4: read_g1(),
+        lagrange_first: read_g1(),
+        lagrange_last: read_g1(),
     })
 }

@@ -1,11 +1,60 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use crate::field::*;
-use crate::transcript::*;
 use crate::honk_structs::*;
+use crate::transcript::RelationParameters;
 use primitive_types::U256;
 
 const NUMBER_OF_SUBRELATIONS: usize = 26;
+const NUMBER_OF_ENTITIES: usize = 40;
+const NUMBER_OF_ALPHAS: usize = 25;
+
+/// Wire enum for indexing into the 40-element evaluation array
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(usize)]
+pub enum Wire {
+    WL = 0,
+    WR = 1,
+    WO = 2,
+    W4 = 3,
+    WLShift = 4,
+    WRShift = 5,
+    WOShift = 6,
+    W4Shift = 7,
+    QL = 8,
+    QR = 9,
+    QO = 10,
+    Q4 = 11,
+    QM = 12,
+    QC = 13,
+    QArith = 14,
+    QRange = 15,
+    QElliptic = 16,
+    QLookup = 17,
+    QPoseidon2External = 18,
+    QPoseidon2Internal = 19,
+    Sigma1 = 20,
+    Sigma2 = 21,
+    Sigma3 = 22,
+    Sigma4 = 23,
+    Id1 = 24,
+    Id2 = 25,
+    Id3 = 26,
+    Id4 = 27,
+    Table1 = 28,
+    Table2 = 29,
+    Table3 = 30,
+    Table4 = 31,
+    LookupReadCounts = 32,
+    LookupReadTags = 33,
+    LookupInverses = 34,
+    ZPerm = 35,
+    ZPermShift = 36,
+    LagrangeFirst = 37,
+    LagrangeLast = 38,
+    // Add one more to make 40 total
+    _Reserved = 39,
+}
 
 /// Main entry point for accumulating all relation evaluations
 pub fn accumulate_relation_evaluations(
@@ -14,7 +63,7 @@ pub fn accumulate_relation_evaluations(
     alphas: &[Fr; NUMBER_OF_ALPHAS],
     pow_partial_eval: Fr,
 ) -> Fr {
-    let mut evals = [Fr::zero(); NUMBER_OF_SUBRELATIONS];
+    let mut evals = [U256::zero(); NUMBER_OF_SUBRELATIONS];
     
     // Accumulate each relation type
     accumulate_arithmetic_relation(purported_evals, &mut evals, pow_partial_eval);
@@ -41,19 +90,22 @@ fn accumulate_arithmetic_relation(
     evals: &mut [Fr; NUMBER_OF_SUBRELATIONS],
     domain_sep: Fr,
 ) {
-    const NEG_HALF: Fr = Fr::from_dec_str(
-        "10944121435919637611123202872628637544348155578649730659431676447034106383360"
-    ).unwrap();
+    // NEG_HALF constant - computed at runtime
+    fn neg_half() -> Fr {
+        U256::from_dec_str(
+            "10944121435919637611123202872628637544348155578649730659431676447034106383360"
+        ).unwrap()
+    }
     
     let q_arith = wire(p, Wire::QArith);
     
     // Subrelation 0
     {
-        let mut accum = sub_mod(q_arith, Fr::from(3));
+        let mut accum = sub_mod(q_arith, U256::from(3));
         accum = mul_mod(accum, wire(p, Wire::QM));
         accum = mul_mod(accum, wire(p, Wire::WR));
         accum = mul_mod(accum, wire(p, Wire::WL));
-        accum = mul_mod(accum, NEG_HALF);
+        accum = mul_mod(accum, neg_half());
         
         accum = add_mod(accum, mul_mod(wire(p, Wire::QL), wire(p, Wire::WL)));
         accum = add_mod(accum, mul_mod(wire(p, Wire::QR), wire(p, Wire::WR)));
@@ -61,7 +113,7 @@ fn accumulate_arithmetic_relation(
         accum = add_mod(accum, mul_mod(wire(p, Wire::Q4), wire(p, Wire::W4)));
         accum = add_mod(accum, wire(p, Wire::QC));
         
-        let term = mul_mod(sub_mod(q_arith, Fr::one()), wire(p, Wire::W4Shift));
+        let term = mul_mod(sub_mod(q_arith, U256::one()), wire(p, Wire::W4Shift));
         accum = add_mod(accum, term);
         
         accum = mul_mod(accum, q_arith);
@@ -76,8 +128,8 @@ fn accumulate_arithmetic_relation(
         accum = sub_mod(accum, wire(p, Wire::WLShift));
         accum = add_mod(accum, wire(p, Wire::QM));
         
-        accum = mul_mod(accum, sub_mod(q_arith, Fr::from(2)));
-        accum = mul_mod(accum, sub_mod(q_arith, Fr::one()));
+        accum = mul_mod(accum, sub_mod(q_arith, U256::from(2)));
+        accum = mul_mod(accum, sub_mod(q_arith, U256::one()));
         accum = mul_mod(accum, q_arith);
         accum = mul_mod(accum, domain_sep);
         
@@ -211,9 +263,9 @@ fn accumulate_delta_range_relation(
     evals: &mut [Fr; NUMBER_OF_SUBRELATIONS],
     domain_sep: Fr,
 ) {
-    let minus_one = neg_mod(Fr::one());
-    let minus_two = neg_mod(Fr::from(2));
-    let minus_three = neg_mod(Fr::from(3));
+    let minus_one = neg_mod(U256::one());
+let minus_two = neg_mod(U256::from(2));
+let minus_three = neg_mod(U256::from(3));
     
     let delta_1 = sub_mod(wire(p, Wire::WR), wire(p, Wire::WL));
     let delta_2 = sub_mod(wire(p, Wire::WO), wire(p, Wire::WR));
@@ -244,7 +296,10 @@ fn accumulate_elliptic_relation(
     evals: &mut [Fr; NUMBER_OF_SUBRELATIONS],
     domain_sep: Fr,
 ) {
-    const GRUMPKIN_B_NEG: Fr = Fr::from(17); // -(-17) = 17
+    // GRUMPKIN_B_NEG constant
+    fn grumpkin_b_neg() -> Fr {
+        U256::from(17)
+    }
     
     let x1 = wire(p, Wire::WR);
     let y1 = wire(p, Wire::WO);
@@ -271,7 +326,7 @@ fn accumulate_elliptic_relation(
         x_add = sub_mod(x_add, y1_sqr);
         x_add = add_mod(x_add, add_mod(y1y2, y1y2));
         
-        let not_double = sub_mod(Fr::one(), q_is_double);
+        let not_double = sub_mod(U256::one(), q_is_double);
         evals[10] = mul_mod(mul_mod(mul_mod(x_add, domain_sep), q_elliptic), not_double);
         
         let y_add = mul_mod(add_mod(y1, y3), x_diff);
@@ -282,9 +337,9 @@ fn accumulate_elliptic_relation(
     
     // Point doubling (when q_is_double = 1)
     {
-        let x_pow_4 = mul_mod(add_mod(y1_sqr, GRUMPKIN_B_NEG), x1);
-        let y1_sqr_4 = mul_mod(Fr::from(4), y1_sqr);
-        let x1_pow_4_9 = mul_mod(x_pow_4, Fr::from(9));
+        let x_pow_4 = mul_mod(add_mod(y1_sqr, grumpkin_b_neg()), x1);
+        let y1_sqr_4 = mul_mod(U256::from(4), y1_sqr);
+        let x1_pow_4_9 = mul_mod(x_pow_4, U256::from(9));
         
         let x_double = mul_mod(add_mod(add_mod(x3, x1), x1), y1_sqr_4);
         let x_double = sub_mod(x_double, x1_pow_4_9);
@@ -292,7 +347,7 @@ fn accumulate_elliptic_relation(
         let acc = mul_mod(mul_mod(mul_mod(x_double, domain_sep), q_elliptic), q_is_double);
         evals[10] = add_mod(evals[10], acc);
         
-        let x1_sqr_3 = mul_mod(mul_mod(Fr::from(3), x1), x1);
+        let x1_sqr_3 = mul_mod(mul_mod(U256::from(3), x1), x1);
         let y_double = mul_mod(x1_sqr_3, sub_mod(x1, x3));
         let y_double = sub_mod(y_double, mul_mod(add_mod(y1, y1), add_mod(y1, y3)));
         
@@ -311,12 +366,12 @@ fn accumulate_auxiliary_relation(
     // Simplified implementation - full version would match Solidity exactly
     
     // For now, just set to zero (placeholder)
-    evals[12] = Fr::zero();
-    evals[13] = Fr::zero();
-    evals[14] = Fr::zero();
-    evals[15] = Fr::zero();
-    evals[16] = Fr::zero();
-    evals[17] = Fr::zero();
+    evals[12] = U256::zero();
+    evals[13] = U256::zero();
+    evals[14] = U256::zero();
+    evals[15] = U256::zero();
+    evals[16] = U256::zero();
+    evals[17] = U256::zero();
 }
 
 /// Poseidon2 External Relation (4 subrelations: indices 18-21)
@@ -331,10 +386,10 @@ fn accumulate_poseidon_external(
     let s4 = add_mod(wire(p, Wire::W4), wire(p, Wire::Q4));
     
     // Compute s^5 for each
-    let u1 = pow_mod(s1, Fr::from(5));
-    let u2 = pow_mod(s2, Fr::from(5));
-    let u3 = pow_mod(s3, Fr::from(5));
-    let u4 = pow_mod(s4, Fr::from(5));
+    let u1 = pow_mod(s1, U256::from(5));
+    let u2 = pow_mod(s2, U256::from(5));
+    let u3 = pow_mod(s3, U256::from(5));
+    let u4 = pow_mod(s4, U256::from(5));
     
     // Matrix multiplication (simplified)
     let t0 = add_mod(u1, u2);
@@ -361,33 +416,36 @@ fn accumulate_poseidon_internal(
     evals: &mut [Fr; NUMBER_OF_SUBRELATIONS],
     domain_sep: Fr,
 ) {
-    // Internal round constants (from Solidity)
-    const DIAG: [Fr; 4] = [
-        Fr::from_hex("0x10dc6e9c006ea38b04b1e03b4bd9490c0d03f98929ca1d7fb56821fd19d3b6e7").unwrap(),
-        Fr::from_hex("0x0c28145b6a44df3e0149b3d0a30b3bb599df9756d4dd9b84a86b38cfb45a740b").unwrap(),
-        Fr::from_hex("0x00544b8338791518b2c7645a50392798b21f75bb60e3596170067d00141cac15").unwrap(),
-        Fr::from_hex("0x222c01175718386f2e2e82eb122789e352e105a3b8fa852613bc534433ee428b").unwrap(),
-    ];
+    // Internal round constants (from Solidity) - computed at runtime
+    fn diag() -> [Fr; 4] {
+        [
+            U256::from_str_radix("10dc6e9c006ea38b04b1e03b4bd9490c0d03f98929ca1d7fb56821fd19d3b6e7", 16).unwrap(),
+            U256::from_str_radix("0c28145b6a44df3e0149b3d0a30b3bb599df9756d4dd9b84a86b38cfb45a740b", 16).unwrap(),
+            U256::from_str_radix("00544b8338791518b2c7645a50392798b21f75bb60e3596170067d00141cac15", 16).unwrap(),
+            U256::from_str_radix("222c01175718386f2e2e82eb122789e352e105a3b8fa852613bc534433ee428b", 16).unwrap(),
+        ]
+    }
     
     let s1 = add_mod(wire(p, Wire::WL), wire(p, Wire::QL));
-    let u1 = pow_mod(s1, Fr::from(5));
+    let u1 = pow_mod(s1, U256::from(5));
     let u2 = wire(p, Wire::WR);
     let u3 = wire(p, Wire::WO);
     let u4 = wire(p, Wire::W4);
     
     let u_sum = add_mod(add_mod(add_mod(u1, u2), u3), u4);
     let q_pos = mul_mod(wire(p, Wire::QPoseidon2Internal), domain_sep);
+    let diag = diag();
     
-    let v1 = add_mod(mul_mod(u1, DIAG[0]), u_sum);
+    let v1 = add_mod(mul_mod(u1, diag[0]), u_sum);
     evals[22] = mul_mod(q_pos, sub_mod(v1, wire(p, Wire::WLShift)));
     
-    let v2 = add_mod(mul_mod(u2, DIAG[1]), u_sum);
+    let v2 = add_mod(mul_mod(u2, diag[1]), u_sum);
     evals[23] = mul_mod(q_pos, sub_mod(v2, wire(p, Wire::WRShift)));
     
-    let v3 = add_mod(mul_mod(u3, DIAG[2]), u_sum);
+    let v3 = add_mod(mul_mod(u3, diag[2]), u_sum);
     evals[24] = mul_mod(q_pos, sub_mod(v3, wire(p, Wire::WOShift)));
     
-    let v4 = add_mod(mul_mod(u4, DIAG[3]), u_sum);
+    let v4 = add_mod(mul_mod(u4, diag[3]), u_sum);
     evals[25] = mul_mod(q_pos, sub_mod(v4, wire(p, Wire::W4Shift)));
 }
 

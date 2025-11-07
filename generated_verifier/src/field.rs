@@ -108,6 +108,7 @@ pub fn to_bytes_be(value: Fr) -> [u8; 32] {
     bytes
 }
 
+
 #[cfg(test)]
 mod tests {
     use super::*;
