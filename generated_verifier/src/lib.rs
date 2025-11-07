@@ -840,5 +840,77 @@ mod verifier {
                 _ => false,
             }
         }
+        /// This parses proof bytes into Proof structure
+        /// Format: [G1 commitments (64 bytes each),
+        /// field evaluations (32 bytes each), opening proof (128 bytes)]
+        fn parse_proof(&self, proof_bytes: &[u8]) -> Option<Proof> {
+            // Minimum expected size:
+            // 7 G1 points * 64 bytes = 448 bytes
+            // 7 field elements * 32 bytes = 224 bytes
+            // 1 G1ProofPoint * 128 bytes = 128 bytes
+            // Total: ~800 bytes minimum
+            if proof_bytes.len() < 800 {
+                return None;
+            }
+
+            let mut offset = 0;
+
+            // Helper to read next 32 bytes as Fr
+            let mut read_fr = || -> Option<Fr> {
+                if offset + 32 > proof_bytes.len() {
+                    return None;
+                }
+                let bytes: [u8; 32] = proof_bytes[offset..offset + 32].try_into().ok()?;
+                offset += 32;
+                Some(from_bytes_be(&bytes))
+            };
+
+            // Helper to read next 64 bytes as G1Point
+            let mut read_g1 = || -> Option<G1Point> {
+                if offset + 64 > proof_bytes.len() {
+                    return None;
+                }
+                let point = self.bytes_to_g1_point(&proof_bytes[offset..offset + 64])?;
+                offset += 64;
+                Some(point)
+            };
+
+            // Helper to read G1ProofPoint (128 bytes: x_0, x_1, y_0, y_1)
+            let mut read_g1_proof_point = || -> Option<G1ProofPoint> {
+                if offset + 128 > proof_bytes.len() {
+                    return None;
+                }
+                Some(G1ProofPoint {
+                    x_0: read_fr()?,
+                    x_1: read_fr()?,
+                    y_0: read_fr()?,
+                    y_1: read_fr()?,
+                })
+            };
+
+            Some(Proof {
+                // Witness commitments (4 G1 points)
+                w_l: read_g1()?,
+                w_r: read_g1()?,
+                w_o: read_g1()?,
+                w_4: read_g1()?,
+                // Permutation commitment (1 G1 point)
+                z_perm: read_g1()?,
+                // Quotient commitments (3 G1 points)
+                t_lo: read_g1()?,
+                t_mid: read_g1()?,
+                t_hi: read_g1()?,
+                // Evaluations (7 field elements)
+                a_eval: read_fr()?,
+                b_eval: read_fr()?,
+                c_eval: read_fr()?,
+                d_eval: read_fr()?,
+                s_eval: read_fr()?,
+                z_eval: read_fr()?,
+                z_lookup_eval: read_fr()?,
+                // Opening proof (1 G1ProofPoint)
+                opening_proof: read_g1_proof_point()?,
+            })
+        }
     }
 }
