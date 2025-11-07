@@ -1,7 +1,7 @@
 #![cfg_attr(not(feature = "std"), no_std, no_main)]
 mod field;
 mod honk_structs;
-mod proof;
+
 mod relations;
 mod transcript;
 #[ink::contract]
