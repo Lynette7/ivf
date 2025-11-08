@@ -1,7 +1,8 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use ink::prelude::vec::Vec;
+use ink::prelude::format;
 use primitive_types::U256;
+use ink::prelude::string::String;
 
 // Type alias for field elements
 pub type Fr = U256;

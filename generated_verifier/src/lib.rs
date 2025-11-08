@@ -1130,5 +1130,23 @@ mod verifier {
             );
             mul_mod(current_eval, term)
         }
+
+        fn verify_shplemini(
+            &self,
+            proof: &Proof,
+            vk: &VerificationKey,
+            transcript: &Transcript,
+        ) -> bool {
+            // TODO: implement full Gemini + Shplonk + KZG verification
+            
+            // Full implementation requires:
+            // 1. Computing r^{2^i} for i = 0..log_n
+            // 2. Batching all commitments and evaluations
+            // 3. Computing Gemini fold evaluations
+            // 4. Final pairing check
+            
+            // Placeholder to allow testing other components
+            true
+        }
     }
 }
