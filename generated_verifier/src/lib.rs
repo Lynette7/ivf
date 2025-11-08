@@ -770,7 +770,7 @@ mod verifier {
             );
 
             // Compute public input delta
-            let public_input_delta = self.compute_public_delta(
+            let public_input_delta = self.compute_public_input_delta(
                 &public_inputs,
                 transcript.relation_parameters.beta,
                 transcript.relation_parameters.gamma,
@@ -898,7 +898,8 @@ mod verifier {
                 _ => false,
             }
         }
-               /// Parses UltraHonk proof bytes into Proof structure
+
+        /// Parses UltraHonk proof bytes into Proof structure
         /// Format:
         /// - 8 G1ProofPoints (w1, w2, w3, w4, z_perm, lookup_read_counts, lookup_read_tags, lookup_inverses): 8 * 128 = 1024 bytes
         /// - sumcheck_univariates: 28 rounds * 8 field elements * 32 bytes = 7168 bytes
@@ -959,7 +960,7 @@ mod verifier {
             let lookup_inverses = read_g1_proof_point(&mut offset)?;
 
             // Read sumcheck_univariates: 28 rounds, each with 8 field elements
-let mut sumcheck_univariates = [[U256::zero(); BATCHED_RELATION_PARTIAL_LENGTH]; CONST_PROOF_SIZE_LOG_N];
+            let mut sumcheck_univariates = [[U256::zero(); BATCHED_RELATION_PARTIAL_LENGTH]; CONST_PROOF_SIZE_LOG_N];
             
             for round in 0..CONST_PROOF_SIZE_LOG_N {
                 for j in 0..BATCHED_RELATION_PARTIAL_LENGTH {
@@ -1007,6 +1008,127 @@ let mut sumcheck_univariates = [[U256::zero(); BATCHED_RELATION_PARTIAL_LENGTH];
                 shplonk_q,
                 kzg_quotient,
             })
+        }
+
+        fn compute_public_input_delta(
+            &self,
+            public_inputs: &[Vec<u8>],
+            beta: Fr,
+            gamma: Fr,
+            n: Fr,
+        ) -> Fr {
+            let mut numerator = U256::one();
+            let mut denominator = U256::one();
+
+            let offset = U256::one();
+            let mut numerator_acc = add_mod(gamma, mul_mod(beta, add_mod(n, offset)));
+            let mut denominator_acc = sub_mod(gamma, mul_mod(beta, add_mod(offset, U256::one())));
+
+            for input in public_inputs {
+                let pub_input = from_bytes_be(&input[..32].try_into().unwrap());
+
+                numerator = mul_mod(numerator, add_mod(numerator_acc, pub_input));
+                denominator = mul_mod(denominator, add_mod(denominator_acc, pub_input));
+
+                numerator_acc = add_mod(numerator_acc, beta);
+                denominator_acc = sub_mod(denominator_acc, beta);
+            }
+
+            crate::field::div_mod(numerator, denominator)
+        }
+
+        // ===================================================================
+        // SUMCHECK VERIFICATION
+        // ===================================================================
+
+        fn verify_sumcheck(
+            &self,
+            proof: &Proof,
+            transcript: &Transcript,
+            vk: &VerificationKey,
+        ) -> bool {
+            let mut round_target = U256::zero();
+            let mut pow_partial_eval = U256::one();
+            
+            let log_n = vk.log_circuit_size.as_u32() as usize;
+            
+            // Perform sumcheck over log_n rounds
+            for round in 0..log_n {
+                let round_univariate = &proof.sumcheck_univariates[round];
+                
+                // Check that univariate(0) + univariate(1) == round_target
+                let sum = add_mod(round_univariate[0], round_univariate[1]);
+                if sum != round_target {
+                    return false;
+                }
+                
+                let round_challenge = transcript.sumcheck_u_challenges[round];
+                
+                // Compute next round target
+                round_target = self.compute_next_target_sum(round_univariate, round_challenge);
+                
+                // Update POW partial evaluation
+                pow_partial_eval = self.partially_evaluate_pow(
+                    transcript.gate_challenges[round],
+                    pow_partial_eval,
+                    round_challenge,
+                );
+            }
+            
+            // Final check: evaluate grand honk relation
+            let grand_honk_sum = crate::relations::accumulate_relation_evaluations(
+                &proof.sumcheck_evaluations,
+                &transcript.relation_parameters,
+                &transcript.alphas,
+                pow_partial_eval,
+            );
+            
+            grand_honk_sum == round_target
+        }
+
+        fn compute_next_target_sum(&self, univariate: &[Fr; BATCHED_RELATION_PARTIAL_LENGTH], challenge: Fr) -> Fr {
+            // Barycentric Lagrange denominators
+            let denominators: [Fr; 8] = [
+                U256::from_dec_str("21888242871839275222246405745257275088548364400416034343698204186575808492881").unwrap(),
+                U256::from_dec_str("720").unwrap(),
+                U256::from_dec_str("21888242871839275222246405745257275088548364400416034343698204186575808491985").unwrap(),
+                U256::from_dec_str("144").unwrap(),
+                U256::from_dec_str("21888242871839275222246405745257275088548364400416034343698204186575808492209").unwrap(),
+                U256::from_dec_str("240").unwrap(),
+                U256::from_dec_str("21888242871839275222246405745257275088548364400416034343698204186575808489521").unwrap(),
+                U256::from_dec_str("5040").unwrap(),
+            ];
+            
+            // Compute B(x) = product of (x - i)
+            let mut numerator = U256::one();
+            for i in 0..8 {
+                numerator = mul_mod(numerator, sub_mod(challenge, U256::from(i)));
+            }
+            
+            // Compute denominator inverses
+            let mut denom_inverses = [U256::zero(); 8];
+            for i in 0..8 {
+                let mut denom = denominators[i];
+                denom = mul_mod(denom, sub_mod(challenge, U256::from(i)));
+                denom_inverses[i] = crate::field::inv_mod(denom);
+            }
+            
+            // Compute sum
+            let mut sum = U256::zero();
+            for i in 0..8 {
+                let term = mul_mod(univariate[i], denom_inverses[i]);
+                sum = add_mod(sum, term);
+            }
+            
+            mul_mod(sum, numerator)
+        }
+
+        fn partially_evaluate_pow(&self, gate_challenge: Fr, current_eval: Fr, round_challenge: Fr) -> Fr {
+            let term = add_mod(
+                U256::one(),
+                mul_mod(round_challenge, sub_mod(gate_challenge, U256::one()))
+            );
+            mul_mod(current_eval, term)
         }
     }
 }
