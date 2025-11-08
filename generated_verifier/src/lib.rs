@@ -746,11 +746,52 @@ mod verifier {
         /// Verifies an UltraHonk proof.
         #[ink(message)]
         pub fn verify(&self, proof: Vec<u8>, public_inputs: Vec<Vec<u8>>) -> bool {
-            // #################################################################
-            // # TODO: PORT THE ULTRAHONK VERIFIER LOGIC
-            // #################################################################
+            // Parse the proof
+            let parsed_proof = match self.parse_proof(&proof) {
+                Some(p) => p,
+                None => return false,
+            };
 
-            true // Placeholder
+            // Load verification key
+            let vk = self.reconstruct_vk();
+
+            // Validate public inputs size
+            if public_inputs.len() != vk.public_inputs_size.as_u32() as usize {
+                return false;
+            }
+
+            // Generate transcript
+            let transcript = Transcript::generate(
+                &parsed_proof,
+                &public_inputs,
+                vk.circuit_size,
+                vk.public_inputs_size,
+                U256::one(), //pub_inputs_offset
+            );
+
+            // Compute public input delta
+            let public_input_delta = self.compute_public_delta(
+                &public_inputs,
+                transcript.relation_parameters.beta,
+                transcript.relation_parameters.gamma,
+                vk.circuit_size,
+            );
+
+            // Update transcript with public input delta
+            let mut transcript = transcript;
+            transcript.relation_parameters.public_inputs_delta = public_input_delta;
+
+            // Verify sumcheck
+            if !self.verify_sumcheck(&parsed_proof, &transcript, &vk) {
+                return false;
+            }
+
+            // Verify Shplemini (batched opening proof)
+            if !self.verify_shplemini(&parsed_proof, &vk, &transcript) {
+                return false;
+            }
+
+            true
         }
 
         // #################################################################
