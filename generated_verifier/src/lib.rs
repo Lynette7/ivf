@@ -1,12 +1,14 @@
 #![cfg_attr(not(feature = "std"), no_std, no_main)]
+mod errors;
 mod field;
 mod honk_structs;
-
 mod relations;
 mod transcript;
+
 #[ink::contract]
 mod verifier {
-    use crate::field::{add_mod, from_bytes_be, mul_mod, sub_mod, to_bytes_be, Fr, MODULUS};
+    use crate::errors::{VerifierError, VerifierResult};
+    use crate::field::{add_mod, from_bytes_be, mul_mod, sub_mod, div_mod, to_bytes_be, Fr, MODULUS};
     use primitive_types::U256;
     use crate::honk_structs::{G1Point, G1ProofPoint, VerificationKey};
     use crate::transcript::{Proof, Transcript, RelationParameters};
@@ -34,6 +36,7 @@ mod verifier {
     const BATCHED_RELATION_PARTIAL_LENGTH: usize = 8;
     const NUMBER_OF_ENTITIES: usize = 40;
     const NUMBER_OF_ALPHAS: usize = 25;
+
     // --- INJECTED HONK VERIFICATION KEY ---
     const VK_LEN: usize = 128;
     const VK: [[u8; 32]; VK_LEN] = [
@@ -698,7 +701,7 @@ mod verifier {
         /// 
         /// Then G1 points as (x, y) pairs:
         /// The order follows the Solidity VK structure
-        fn reconstruct_vk(&self) -> VerificationKey {
+        fn reconstruct_vk(&self) -> VerifierResult<VerificationKey> {
             let mut idx = 0;
 
             // Helper to extract a G1Point from VK array (2 field elements: x, y)
@@ -714,6 +717,11 @@ mod verifier {
             let log_circuit_size = self.vk_field_to_fr(&VK[1]);
             let public_inputs_size = self.vk_field_to_fr(&VK[2]);
 
+            // Validate metadata
+            if circuit_size.is_zero() {
+                return Err(VerifierError::other("Invalid circuit size"));
+            }
+
             // G1 points start at index 3
             // Skip index 3 if it's a duplicate of public_inputs_size
             // Check if index 3 equals index 2 - if so, skip it
@@ -726,7 +734,7 @@ mod verifier {
             // qm, qc, ql, qr, qo, q4, qLookup, qArith, qDeltaRange, qElliptic, qAux,
             // qPoseidon2External, qPoseidon2Internal, s1, s2, s3, s4,
             // id1, id2, id3, id4, t1, t2, t3, t4, lagrangeFirst, lagrangeLast
-            VerificationKey {
+            Ok(VerificationKey {
                 circuit_size,
                 log_circuit_size,
                 public_inputs_size,
@@ -757,25 +765,21 @@ mod verifier {
                 t4: get_g1_point(idx + 48),
                 lagrange_first: get_g1_point(idx + 50),
                 lagrange_last: get_g1_point(idx + 52),
-            }
+            })
         }
 
         /// Verifies an UltraHonk proof.
         #[ink(message)]
-        pub fn verify(&self, proof: Vec<u8>, public_inputs: Vec<Vec<u8>>) -> bool {
+        pub fn verify(&self, proof: Vec<u8>, public_inputs: Vec<Vec<u8>>) -> Result<bool, VerifierError> {
             // Parse the proof
-            let parsed_proof = match self.parse_proof(&proof) {
-                Some(p) => p,
-                None => return false,
-            };
+            let parsed_proof = self.parse_proof(&proof)
+                .ok_or(VerifierError::InvalidProofFormat)?;
 
             // Load verification key
-            let vk = self.reconstruct_vk();
+            let vk = self.reconstruct_vk()?;
 
             // Validate public inputs size
-            if public_inputs.len() != vk.public_inputs_size.as_u32() as usize {
-                return false;
-            }
+            self.validate_public_inputs(&public_inputs, &vk)?;
 
             // Generate transcript
             let transcript = Transcript::generate(
@@ -792,23 +796,48 @@ mod verifier {
                 transcript.relation_parameters.beta,
                 transcript.relation_parameters.gamma,
                 vk.circuit_size,
-            );
+            )?;
 
             // Update transcript with public input delta
             let mut transcript = transcript;
             transcript.relation_parameters.public_inputs_delta = public_input_delta;
 
             // Verify sumcheck
-            if !self.verify_sumcheck(&parsed_proof, &transcript, &vk) {
-                return false;
-            }
+            self.verify_sumcheck(&parsed_proof, &transcript, &vk)?;
 
             // Verify Shplemini (batched opening proof)
-            if !self.verify_shplemini(&parsed_proof, &vk, &transcript) {
-                return false;
-            }
+            self.verify_shplemini(&parsed_proof, &vk, &transcript)?;
 
-            true
+            Ok(true)
+        }
+
+        /// Validate public inputs format and size
+        fn validate_public_inputs(
+            &self,
+            public_inputs: &[Vec<u8>],
+            vk: &VerificationKey,
+        ) -> VerifierResult<()> {
+            let expected = vk.public_inputs_size.as_u32() as usize;
+            let got = public_inputs.len();
+            
+            if got != expected {
+                return Err(VerifierError::InvalidPublicInputsLength { expected: expected as u32, got });
+            }
+            
+            // Validate each input is 32 bytes
+            for (i, input) in public_inputs.iter().enumerate() {
+                if input.len() != 32 {
+                    return Err(VerifierError::InvalidPublicInputFormat { index: i });
+                }
+                
+                // Validate input is a valid field element (< MODULUS)
+                let value = from_bytes_be(&input[..32].try_into().unwrap());
+                if value >= MODULUS {
+                    return Err(VerifierError::InvalidFieldElement);
+                }
+            }
+            
+            Ok(())
         }
 
         // #################################################################
@@ -1033,7 +1062,7 @@ mod verifier {
             beta: Fr,
             gamma: Fr,
             n: Fr,
-        ) -> Fr {
+        ) -> VerifierResult<Fr> {
             let mut numerator = U256::one();
             let mut denominator = U256::one();
 
@@ -1051,7 +1080,11 @@ mod verifier {
                 denominator_acc = sub_mod(denominator_acc, beta);
             }
 
-            crate::field::div_mod(numerator, denominator)
+            if denominator.is_zero() {
+                return Err(VerifierError::DivisionByZero);
+            }
+
+            Ok(div_mod(numerator, denominator))
         }
 
         // ===================================================================
@@ -1063,7 +1096,7 @@ mod verifier {
             proof: &Proof,
             transcript: &Transcript,
             vk: &VerificationKey,
-        ) -> bool {
+        ) -> VerifierResult<()> {
             let mut round_target = U256::zero();
             let mut pow_partial_eval = U256::one();
             
@@ -1076,7 +1109,7 @@ mod verifier {
                 // Check that univariate(0) + univariate(1) == round_target
                 let sum = add_mod(round_univariate[0], round_univariate[1]);
                 if sum != round_target {
-                    return false;
+                    return Err(VerifierError::SumcheckFailed { round });
                 }
                 
                 let round_challenge = transcript.sumcheck_u_challenges[round];
@@ -1100,7 +1133,11 @@ mod verifier {
                 pow_partial_eval,
             );
             
-            grand_honk_sum == round_target
+            if grand_honk_sum != round_target {
+                return Err(VerifierError::SumcheckEvaluationMismatch);
+            }
+
+            Ok(())
         }
 
         fn compute_next_target_sum(&self, univariate: &[Fr; BATCHED_RELATION_PARTIAL_LENGTH], challenge: Fr) -> Fr {
@@ -1150,10 +1187,10 @@ mod verifier {
 
         fn verify_shplemini(
             &self,
-            proof: &Proof,
-            vk: &VerificationKey,
-            transcript: &Transcript,
-        ) -> bool {
+            _proof: &Proof,
+            _vk: &VerificationKey,
+            _transcript: &Transcript,
+        ) -> VerifierResult<()> {
             // TODO: implement full Gemini + Shplonk + KZG verification
             
             // Full implementation requires:
@@ -1163,7 +1200,328 @@ mod verifier {
             // 4. Final pairing check
             
             // Placeholder to allow testing other components
-            true
+            Ok(())
         }
     }
 }
+
+
+
+
+
+
+
+
+
+// #![cfg_attr(not(feature = "std"), no_std, no_main)]
+// mod field;
+// mod honk_structs;
+// mod errors;
+// mod relations;
+// mod transcript;
+
+// #[ink::contract]
+// mod verifier {
+//     use crate::field::{add_mod, from_bytes_be, mul_mod, sub_mod, to_bytes_be, div_mod, Fr, MODULUS};
+//     use crate::errors::{VerifierError, VerifierResult};
+//     use primitive_types::U256;
+//     use crate::honk_structs::{G1Point, G1ProofPoint, VerificationKey};
+//     use crate::transcript::{Proof, Transcript, RelationParameters};
+//     use ink::env::call::{build_call, ExecutionInput, Selector};
+//     use ink::env::DefaultEnvironment;
+//     use ink::prelude::vec::Vec;
+//     use ink::primitives::H160;
+
+//     // --- PRECOMPILE ADDRESSES ---
+//     const SHA256_ADDR: H160 = H160([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x02]);
+//     const BN128_ADD_ADDR: H160 = H160([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x06]);
+//     const BN128_MUL_ADDR: H160 = H160([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x07]);
+//     const BN128_PAIRING_ADDR: H160 = H160([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x08]);
+    
+//     // --- ULTRAHONK PROOF CONSTANTS ---
+//     const CONST_PROOF_SIZE_LOG_N: usize = 28;
+//     const BATCHED_RELATION_PARTIAL_LENGTH: usize = 8;
+//     const NUMBER_OF_ENTITIES: usize = 40;
+//     const NUMBER_OF_ALPHAS: usize = 25;
+    
+//     // --- INJECTED HONK VERIFICATION KEY ---
+//     const VK_LEN: usize = 128;
+//     const VK: [[u8; 32]; VK_LEN] = [
+//         // This will be injected by the generator - using placeholder from your code
+//         [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x20],
+//         // ... rest of VK array - 127 more entries
+//         // Truncated for brevity - use your actual VK data
+//     ];
+
+//     #[ink(storage)]
+//     pub struct Verifier {}
+
+//     impl Verifier {
+//         #[ink(constructor)]
+//         pub fn new() -> Self {
+//             Self {}
+//         }
+
+//         /// Main verification entry point with proper error handling
+//         #[ink(message)]
+//         pub fn verify(&self, proof: Vec<u8>, public_inputs: Vec<Vec<u8>>) -> Result<bool, VerifierError> {
+//             // 1. Parse proof
+//             let parsed_proof = self.parse_proof(&proof)
+//                 .ok_or(VerifierError::InvalidProofFormat)?;
+            
+//             // 2. Load verification key
+//             let vk = self.reconstruct_vk()?;
+            
+//             // 3. Validate public inputs
+//             self.validate_public_inputs(&public_inputs, &vk)?;
+            
+//             // 4. Generate transcript
+//             let transcript = Transcript::generate(
+//                 &parsed_proof,
+//                 &public_inputs,
+//                 vk.circuit_size,
+//                 vk.public_inputs_size,
+//                 U256::one(),
+//             );
+            
+//             // 5. Compute public input delta
+//             let public_input_delta = self.compute_public_input_delta(
+//                 &public_inputs,
+//                 transcript.relation_parameters.beta,
+//                 transcript.relation_parameters.gamma,
+//                 vk.circuit_size,
+//             )?;
+            
+//             let mut transcript = transcript;
+//             transcript.relation_parameters.public_inputs_delta = public_input_delta;
+            
+//             // 6. Verify sumcheck
+//             self.verify_sumcheck(&parsed_proof, &transcript, &vk)?;
+            
+//             // 7. Verify Shplemini
+//             self.verify_shplemini(&parsed_proof, &vk, &transcript)?;
+            
+//             Ok(true)
+//         }
+
+//         /// Validate public inputs format and size
+//         fn validate_public_inputs(
+//             &self,
+//             public_inputs: &[Vec<u8>],
+//             vk: &VerificationKey,
+//         ) -> VerifierResult<()> {
+//             let expected = vk.public_inputs_size.as_u32() as usize;
+//             let got = public_inputs.len();
+            
+//             if got != expected {
+//                 return Err(VerifierError::InvalidPublicInputsLength { expected: expected as u32, got });
+//             }
+            
+//             // Validate each input is 32 bytes
+//             for (i, input) in public_inputs.iter().enumerate() {
+//                 if input.len() != 32 {
+//                     return Err(VerifierError::InvalidPublicInputFormat { index: i });
+//                 }
+                
+//                 // Validate input is a valid field element (< MODULUS)
+//                 let value = from_bytes_be(&input[..32].try_into().unwrap());
+//                 if value >= MODULUS {
+//                     return Err(VerifierError::InvalidFieldElement);
+//                 }
+//             }
+            
+//             Ok(())
+//         }
+
+//         /// Reconstruct VK with error handling
+//         fn reconstruct_vk(&self) -> VerifierResult<VerificationKey> {
+//             let read_fr = |i: usize| -> Fr {
+//                 from_bytes_be(&VK[i])
+//             };
+            
+//             let read_g1 = |i: usize| -> G1Point {
+//                 G1Point {
+//                     x: read_fr(i),
+//                     y: read_fr(i + 1),
+//                 }
+//             };
+            
+//             let circuit_size = read_fr(0);
+//             let log_circuit_size = read_fr(1);
+//             let public_inputs_size = read_fr(2);
+            
+//             // Validate metadata
+//             if circuit_size.is_zero() {
+//                 return Err(VerifierError::other("Invalid circuit size"));
+//             }
+            
+//             // G1 points start at index 3 (or 4 if index 3 is duplicate)
+//             let g1_start = if read_fr(3) == public_inputs_size { 4 } else { 3 };
+//             let idx = g1_start;
+            
+//             Ok(VerificationKey {
+//                 circuit_size,
+//                 log_circuit_size,
+//                 public_inputs_size,
+//                 qm: read_g1(idx),
+//                 qc: read_g1(idx + 2),
+//                 ql: read_g1(idx + 4),
+//                 qr: read_g1(idx + 6),
+//                 qo: read_g1(idx + 8),
+//                 q4: read_g1(idx + 10),
+//                 q_lookup: read_g1(idx + 12),
+//                 q_arith: read_g1(idx + 14),
+//                 q_delta_range: read_g1(idx + 16),
+//                 q_elliptic: read_g1(idx + 18),
+//                 q_aux: read_g1(idx + 20),
+//                 q_poseidon2_external: read_g1(idx + 22),
+//                 q_poseidon2_internal: read_g1(idx + 24),
+//                 s1: read_g1(idx + 26),
+//                 s2: read_g1(idx + 28),
+//                 s3: read_g1(idx + 30),
+//                 s4: read_g1(idx + 32),
+//                 id1: read_g1(idx + 34),
+//                 id2: read_g1(idx + 36),
+//                 id3: read_g1(idx + 38),
+//                 id4: read_g1(idx + 40),
+//                 t1: read_g1(idx + 42),
+//                 t2: read_g1(idx + 44),
+//                 t3: read_g1(idx + 46),
+//                 t4: read_g1(idx + 48),
+//                 lagrange_first: read_g1(idx + 50),
+//                 lagrange_last: read_g1(idx + 52),
+//             })
+//         }
+
+//         fn compute_public_input_delta(
+//             &self,
+//             public_inputs: &[Vec<u8>],
+//             beta: Fr,
+//             gamma: Fr,
+//             n: Fr,
+//         ) -> VerifierResult<Fr> {
+//             let mut numerator = U256::one();
+//             let mut denominator = U256::one();
+            
+//             let offset = U256::one();
+//             let mut numerator_acc = add_mod(gamma, mul_mod(beta, add_mod(n, offset)));
+//             let mut denominator_acc = sub_mod(gamma, mul_mod(beta, add_mod(offset, U256::one())));
+            
+//             for input in public_inputs {
+//                 let pub_input = from_bytes_be(&input[..32].try_into().unwrap());
+                
+//                 numerator = mul_mod(numerator, add_mod(numerator_acc, pub_input));
+//                 denominator = mul_mod(denominator, add_mod(denominator_acc, pub_input));
+                
+//                 numerator_acc = add_mod(numerator_acc, beta);
+//                 denominator_acc = sub_mod(denominator_acc, beta);
+//             }
+            
+//             if denominator.is_zero() {
+//                 return Err(VerifierError::DivisionByZero);
+//             }
+            
+//             Ok(div_mod(numerator, denominator))
+//         }
+
+//         fn verify_sumcheck(
+//             &self,
+//             proof: &Proof,
+//             transcript: &Transcript,
+//             vk: &VerificationKey,
+//         ) -> VerifierResult<()> {
+//             let mut round_target = U256::zero();
+//             let mut pow_partial_eval = U256::one();
+            
+//             let log_n = vk.log_circuit_size.as_u32() as usize;
+            
+//             for round in 0..log_n {
+//                 let round_univariate = &proof.sumcheck_univariates[round];
+                
+//                 // Check sum
+//                 let sum = add_mod(round_univariate[0], round_univariate[1]);
+//                 if sum != round_target {
+//                     return Err(VerifierError::SumcheckFailed { round });
+//                 }
+                
+//                 let round_challenge = transcript.sumcheck_u_challenges[round];
+//                 round_target = self.compute_next_target_sum(round_univariate, round_challenge);
+//                 pow_partial_eval = self.partially_evaluate_pow(
+//                     transcript.gate_challenges[round],
+//                     pow_partial_eval,
+//                     round_challenge,
+//                 );
+//             }
+            
+//             // Final check
+//             let grand_honk_sum = crate::relations::accumulate_relation_evaluations(
+//                 &proof.sumcheck_evaluations,
+//                 &transcript.relation_parameters,
+//                 &transcript.alphas,
+//                 pow_partial_eval,
+//             );
+            
+//             if grand_honk_sum != round_target {
+//                 return Err(VerifierError::SumcheckEvaluationMismatch);
+//             }
+            
+//             Ok(())
+//         }
+
+//         fn compute_next_target_sum(&self, univariate: &[Fr; BATCHED_RELATION_PARTIAL_LENGTH], challenge: Fr) -> Fr {
+//             let denominators: [Fr; 8] = [
+//                 U256::from_dec_str("21888242871839275222246405745257275088548364400416034343698204186575808492881").unwrap(),
+//                 U256::from_dec_str("720").unwrap(),
+//                 U256::from_dec_str("21888242871839275222246405745257275088548364400416034343698204186575808491985").unwrap(),
+//                 U256::from_dec_str("144").unwrap(),
+//                 U256::from_dec_str("21888242871839275222246405745257275088548364400416034343698204186575808492209").unwrap(),
+//                 U256::from_dec_str("240").unwrap(),
+//                 U256::from_dec_str("21888242871839275222246405745257275088548364400416034343698204186575808489521").unwrap(),
+//                 U256::from_dec_str("5040").unwrap(),
+//             ];
+            
+//             let mut numerator = U256::one();
+//             for i in 0..8 {
+//                 numerator = mul_mod(numerator, sub_mod(challenge, U256::from(i)));
+//             }
+            
+//             let mut denom_inverses = [U256::zero(); 8];
+//             for i in 0..8 {
+//                 let mut denom = denominators[i];
+//                 denom = mul_mod(denom, sub_mod(challenge, U256::from(i)));
+//                 denom_inverses[i] = crate::field::inv_mod(denom);
+//             }
+            
+//             let mut sum = U256::zero();
+//             for i in 0..8 {
+//                 let term = mul_mod(univariate[i], denom_inverses[i]);
+//                 sum = add_mod(sum, term);
+//             }
+            
+//             mul_mod(sum, numerator)
+//         }
+
+//         fn partially_evaluate_pow(&self, gate_challenge: Fr, current_eval: Fr, round_challenge: Fr) -> Fr {
+//             let term = add_mod(
+//                 U256::one(),
+//                 mul_mod(round_challenge, sub_mod(gate_challenge, U256::one()))
+//             );
+//             mul_mod(current_eval, term)
+//         }
+
+//         fn verify_shplemini(
+//             &self,
+//             _proof: &Proof,
+//             _vk: &VerificationKey,
+//             _transcript: &Transcript,
+//         ) -> VerifierResult<()> {
+//             // Placeholder - implement full Shplemini verification
+//             // For MVP, return Ok to test other components
+//             Ok(())
+//         }
+
+//         // Keep all the existing helper functions (parse_proof, precompile calls, etc.)
+//         // ... (sha256_precompile, ec_add_precompile, ec_mul_precompile, ec_pairing_precompile)
+//         // ... (g1_point_to_bytes, bytes_to_g1_point, vk_field_to_fr, parse_proof)
+//     }
+// }
