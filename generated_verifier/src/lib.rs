@@ -11,7 +11,7 @@ mod verifier {
     use crate::field::{add_mod, from_bytes_be, mul_mod, sub_mod, div_mod, to_bytes_be, Fr, MODULUS};
     use primitive_types::U256;
     use crate::honk_structs::{G1Point, G1ProofPoint, VerificationKey};
-    use crate::transcript::{Proof, Transcript, RelationParameters};
+    use crate::transcript::{Proof, Transcript};
     use ink::env::call::{build_call, ExecutionInput, Selector};
     use ink::env::DefaultEnvironment;
     use ink::prelude::vec::Vec;
@@ -702,8 +702,6 @@ mod verifier {
         /// Then G1 points as (x, y) pairs:
         /// The order follows the Solidity VK structure
         fn reconstruct_vk(&self) -> VerifierResult<VerificationKey> {
-            let mut idx = 0;
-
             // Helper to extract a G1Point from VK array (2 field elements: x, y)
             let get_g1_point = |idx: usize| -> G1Point {
                 G1Point {
@@ -727,7 +725,7 @@ mod verifier {
             // Check if index 3 equals index 2 - if so, skip it
             let g1_start = if self.vk_field_to_fr(&VK[3]) == public_inputs_size { 4 } else { 3 };
             
-            idx = g1_start;
+            let idx = g1_start;
             
             // Extract all G1 points in the order specified by the Solidity VK
             // Based on the Solidity VK, the order is:
@@ -973,7 +971,7 @@ mod verifier {
             let mut offset = 0;
 
             // Helper to read next 32 bytes as Fr
-            let mut read_fr = |offset: &mut usize| -> Option<Fr> {
+            let read_fr = |offset: &mut usize| -> Option<Fr> {
                 if *offset + 32 > proof_bytes.len() {
                     return None;
                 }
@@ -983,7 +981,7 @@ mod verifier {
             };
 
             // Helper to read G1ProofPoint (128 bytes: x_0, x_1, y_0, y_1)
-            let mut read_g1_proof_point = |offset: &mut usize| -> Option<G1ProofPoint> {
+            let read_g1_proof_point = |offset: &mut usize| -> Option<G1ProofPoint> {
                 if *offset + 128 > proof_bytes.len() {
                     return None;
                 }

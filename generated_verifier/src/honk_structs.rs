@@ -76,7 +76,7 @@ pub fn parse_vk_structured(vk_bytes: &[u8]) -> Result<VerificationKey, String> {
     let mut offset = 0;
 
     // Helper to read next field element
-    let mut read_fr = |offset: &mut usize| -> U256 {
+    let read_fr = |offset: &mut usize| -> U256 {
         let bytes: [u8; 32] = vk_bytes[*offset..*offset + 32]
             .try_into()
             .expect("slice with incorrect length");
@@ -85,7 +85,7 @@ pub fn parse_vk_structured(vk_bytes: &[u8]) -> Result<VerificationKey, String> {
     };
 
     // Helper to read next G1 point
-    let mut read_g1 = |offset: &mut usize| -> G1Point {
+    let read_g1 = |offset: &mut usize| -> G1Point {
         G1Point {
             x: read_fr(offset),
             y: read_fr(offset),

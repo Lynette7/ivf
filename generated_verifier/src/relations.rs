@@ -1,7 +1,6 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use crate::field::{Fr, add_mod, sub_mod, mul_mod, pow_mod, neg_mod};
-use crate::honk_structs::*;
 use crate::transcript::RelationParameters;
 use primitive_types::U256;
 
@@ -218,10 +217,10 @@ fn accumulate_log_derivative_lookup(
     let mut derived_1 = add_mod(wire(p, Wire::WL), rp.gamma);
     derived_1 = add_mod(derived_1, mul_mod(wire(p, Wire::QR), wire(p, Wire::WLShift)));
     
-    let mut derived_2 = add_mod(wire(p, Wire::WR), 
+    let derived_2 = add_mod(wire(p, Wire::WR), 
         mul_mod(wire(p, Wire::QM), wire(p, Wire::WRShift)));
     
-    let mut derived_3 = add_mod(wire(p, Wire::WO),
+    let derived_3 = add_mod(wire(p, Wire::WO),
         mul_mod(wire(p, Wire::QC), wire(p, Wire::WOShift)));
     
     let mut read_term = add_mod(derived_1, mul_mod(derived_2, rp.eta));
@@ -357,10 +356,10 @@ fn accumulate_elliptic_relation(
 
 /// Auxiliary Relation (6 subrelations: indices 12-17)
 fn accumulate_auxiliary_relation(
-    p: &[Fr; NUMBER_OF_ENTITIES],
-    rp: &RelationParameters,
+    _p: &[Fr; NUMBER_OF_ENTITIES],
+    _rp: &RelationParameters,
     evals: &mut [Fr; NUMBER_OF_SUBRELATIONS],
-    domain_sep: Fr,
+    _domain_sep: Fr,
 ) {
     // This is complex - includes non-native field arithmetic, limb accumulation, and RAM/ROM checks
     // Simplified implementation - full version would match Solidity exactly

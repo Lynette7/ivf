@@ -109,12 +109,10 @@ impl Transcript {
         public_inputs_size: Fr,
         pub_inputs_offset: Fr,
     ) -> Self {
-        let mut prev_challenge = U256::zero();
-        
         // Generate eta challenges
         let (eta, eta_two, eta_three, prev) = 
             Self::generate_eta_challenge(proof, public_inputs, circuit_size, public_inputs_size, pub_inputs_offset);
-        prev_challenge = prev;
+        let mut prev_challenge = prev;
         
         // Generate beta and gamma
         let (beta, gamma, prev) = Self::generate_beta_gamma(prev_challenge, proof);
