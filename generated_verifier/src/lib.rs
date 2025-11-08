@@ -691,13 +691,17 @@ mod verifier {
         /// We need to reconstruct the VerificationKey from the flat VK array
         /// The VK array contains 128 field elements (32 bytes each)
         /// Layout: [metadata fields, then G1 points as (x, y) pairs]
+        /// Index 0: circuit_size (N)
+        /// Index 1: log_circuit_size (LOG_N)
+        /// Index 2: public_inputs_size
+        /// Index 3: num_public_inputs (sometimes present, may be same as index 2)
+        /// 
+        /// Then G1 points as (x, y) pairs:
+        /// The order follows the Solidity VK structure
         fn reconstruct_vk(&self) -> VerificationKey {
-            // Metadata fields (first 4 elements)
-            let circuit_size = self.vk_field_to_fr(&VK[0]);
-            let log_circuit_size = self.vk_field_to_fr(&VK[1]);
-            let public_inputs_size = self.vk_field_to_fr(&VK[2]);
+            let mut idx = 0;
 
-            // Helper to extract a G1Point from VK array starting at index
+            // Helper to extract a G1Point from VK array (2 field elements: x, y)
             let get_g1_point = |idx: usize| -> G1Point {
                 G1Point {
                     x: self.vk_field_to_fr(&VK[idx]),
@@ -705,39 +709,52 @@ mod verifier {
                 }
             };
 
-            // Starting index for G1 points (after 4 metadata fields)
-            let mut idx = 4;
+            // Read metadata fields (first 3 fields)
+            let circuit_size = self.vk_field_to_fr(&VK[0]);
+            let log_circuit_size = self.vk_field_to_fr(&VK[1]);
+            let public_inputs_size = self.vk_field_to_fr(&VK[2]);
 
-            // Extract all G1 points in order
+            // G1 points start at index 3
+            // Skip index 3 if it's a duplicate of public_inputs_size
+            // Check if index 3 equals index 2 - if so, skip it
+            let g1_start = if self.vk_field_to_fr(&VK[3]) == public_inputs_size { 4 } else { 3 };
+            
+            idx = g1_start;
+            
+            // Extract all G1 points in the order specified by the Solidity VK
+            // Based on the Solidity VK, the order is:
+            // qm, qc, ql, qr, qo, q4, qLookup, qArith, qDeltaRange, qElliptic, qAux,
+            // qPoseidon2External, qPoseidon2Internal, s1, s2, s3, s4,
+            // id1, id2, id3, id4, t1, t2, t3, t4, lagrangeFirst, lagrangeLast
             VerificationKey {
                 circuit_size,
                 log_circuit_size,
                 public_inputs_size,
-                ql: get_g1_point(idx),
-                qr: get_g1_point(idx + 2),
-                qo: get_g1_point(idx + 4),
-                q4: get_g1_point(idx + 6),
-                qm: get_g1_point(idx + 8),
-                qc: get_g1_point(idx + 10),
-                q_arith: get_g1_point(idx + 12),
-                q_delta_range: get_g1_point(idx + 14),
-                q_elliptic: get_g1_point(idx + 16),
-                q_aux: get_g1_point(idx + 18),
-                q_lookup: get_g1_point(idx + 20),
+                qm: get_g1_point(idx),
+                qc: get_g1_point(idx + 2),
+                ql: get_g1_point(idx + 4),
+                qr: get_g1_point(idx + 6),
+                qo: get_g1_point(idx + 8),
+                q4: get_g1_point(idx + 10),
+                q_lookup: get_g1_point(idx + 12),
+                q_arith: get_g1_point(idx + 14),
+                q_delta_range: get_g1_point(idx + 16),
+                q_elliptic: get_g1_point(idx + 18),
+                q_aux: get_g1_point(idx + 20),
                 q_poseidon2_external: get_g1_point(idx + 22),
                 q_poseidon2_internal: get_g1_point(idx + 24),
                 s1: get_g1_point(idx + 26),
                 s2: get_g1_point(idx + 28),
                 s3: get_g1_point(idx + 30),
                 s4: get_g1_point(idx + 32),
-                t1: get_g1_point(idx + 34),
-                t2: get_g1_point(idx + 36),
-                t3: get_g1_point(idx + 38),
-                t4: get_g1_point(idx + 40),
-                id1: get_g1_point(idx + 42),
-                id2: get_g1_point(idx + 44),
-                id3: get_g1_point(idx + 46),
-                id4: get_g1_point(idx + 48),
+                id1: get_g1_point(idx + 34),
+                id2: get_g1_point(idx + 36),
+                id3: get_g1_point(idx + 38),
+                id4: get_g1_point(idx + 40),
+                t1: get_g1_point(idx + 42),
+                t2: get_g1_point(idx + 44),
+                t3: get_g1_point(idx + 46),
+                t4: get_g1_point(idx + 48),
                 lagrange_first: get_g1_point(idx + 50),
                 lagrange_last: get_g1_point(idx + 52),
             }
