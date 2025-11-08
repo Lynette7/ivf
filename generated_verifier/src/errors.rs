@@ -1,21 +1,20 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use ink::prelude::string::String;
-
 /// Errors that can occur during verification
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[ink::scale_derive(Encode, Decode, TypeInfo)]
 pub enum VerifierError {
     /// Proof has invalid length or format
     InvalidProofFormat,
     
     /// Public inputs length doesn't match verification key
-    InvalidPublicInputsLength { expected: u32, got: usize },
+    InvalidPublicInputsLength,
     
     /// Public input has invalid length (should be 32 bytes)
-    InvalidPublicInputFormat { index: usize },
+    InvalidPublicInputFormat,
     
-    /// Sumcheck verification failed at a specific round
-    SumcheckFailed { round: usize },
+    /// Sumcheck verification failed
+    SumcheckFailed,
     
     /// Final sumcheck evaluation doesn't match expected value
     SumcheckEvaluationMismatch,
@@ -27,7 +26,7 @@ pub enum VerifierError {
     PairingCheckFailed,
     
     /// Precompile call failed
-    PrecompileCallFailed { precompile: &'static str },
+    PrecompileCallFailed,
     
     /// Invalid field element (>= modulus)
     InvalidFieldElement,
@@ -35,15 +34,11 @@ pub enum VerifierError {
     /// Division by zero
     DivisionByZero,
     
-    /// Generic error with message
-    Other(String),
-}
-
-impl VerifierError {
-    /// Create a generic error from a string
-    pub fn other(msg: &str) -> Self {
-        Self::Other(String::from(msg))
-    }
+    /// Invalid verification key
+    InvalidVerificationKey,
+    
+    /// Generic error
+    Other,
 }
 
 /// Result type for verifier operations

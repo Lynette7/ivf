@@ -717,7 +717,7 @@ mod verifier {
 
             // Validate metadata
             if circuit_size.is_zero() {
-                return Err(VerifierError::other("Invalid circuit size"));
+                return Err(VerifierError::InvalidVerificationKey);
             }
 
             // G1 points start at index 3
@@ -819,13 +819,13 @@ mod verifier {
             let got = public_inputs.len();
             
             if got != expected {
-                return Err(VerifierError::InvalidPublicInputsLength { expected: expected as u32, got });
+                return Err(VerifierError::InvalidPublicInputsLength);
             }
             
             // Validate each input is 32 bytes
-            for (i, input) in public_inputs.iter().enumerate() {
+            for input in public_inputs.iter() {
                 if input.len() != 32 {
-                    return Err(VerifierError::InvalidPublicInputFormat { index: i });
+                    return Err(VerifierError::InvalidPublicInputFormat);
                 }
                 
                 // Validate input is a valid field element (< MODULUS)
@@ -1107,7 +1107,7 @@ mod verifier {
                 // Check that univariate(0) + univariate(1) == round_target
                 let sum = add_mod(round_univariate[0], round_univariate[1]);
                 if sum != round_target {
-                    return Err(VerifierError::SumcheckFailed { round });
+                    return Err(VerifierError::SumcheckFailed);
                 }
                 
                 let round_challenge = transcript.sumcheck_u_challenges[round];
