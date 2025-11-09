@@ -5,9 +5,6 @@ use std::path::PathBuf;
 
 // A field is 32 bytes
 const FIELD_SIZE: usize = 32;
-// The VK length (UltraHonk has 128 field elements)
-const HONK_VK_FIELDS: usize = 128;
-const VK_TOTAL_BYTES: usize = FIELD_SIZE * HONK_VK_FIELDS;
 
 /// Generates an ink! v6 verifier smart contract from a Noir VK
 #[derive(Parser, Debug)]
@@ -21,7 +18,7 @@ struct Args {
     output: PathBuf,
 }
 
-/// The VK is just a falt array of 112 field elements
+/// The VK is just a falt array of field elements
 #[derive(Debug)]
 struct VerificationKey {
     fields: Vec<[u8; 32]>,
@@ -35,38 +32,57 @@ fn main() {
     // println!("      -> Writing contract to: {:?}", args.output);
 
     // Read the vk file
-    let vk_bytes = fs::read(args.vk).expect("Failed to read VK file");
+    let vk_bytes = fs::read(&args.vk).expect("Failed to read VK file");
     println!("      -> Read {} bytes.", vk_bytes.len());
 
-    // Parse the VK bytes
+    // Parse the VK bytes (flexible size)
     let vk = parse_vk(&vk_bytes).expect("Failed to parse VK file");
     println!(
         "      -> Successfully parsed VK with {} field elements.",
         vk.fields.len()
     );
+    
+    // Show first few elements for debugging
+    println!("\n        VK Structure:");
+    if vk.fields.len() >= 3 {
+        println!("         Circuit size: 0x{}", hex_encode_last_bytes(&vk.fields[0], 4));
+        println!("         Log size:     0x{}", hex_encode_last_bytes(&vk.fields[1], 4));
+        println!("         Pub inputs:   0x{}", hex_encode_last_bytes(&vk.fields[2], 4));
+    }
 
     // Generate the contract code
     let contract_code = generate_contract_code(&vk);
 
     // Write the code to the output file
-    fs::write(args.output.clone(), contract_code).expect("Failed to write output file");
+    fs::write(&args.output, contract_code).expect("Failed to write output file");
 
     println!(
         "Success! ink! v6 verifier contract generated at {:?}",
         args.output
     );
+    println!("   VK Length: {} field elements", vk.fields.len());
 }
 
-/// Parses the flat Barretenberg Honk vk file
+/// Parses the flat Barretenberg Honk vk file (flexible size)
 fn parse_vk(vk_bytes: &[u8]) -> Result<VerificationKey, Error> {
-    if vk_bytes.len() != VK_TOTAL_BYTES {
+    if vk_bytes.len() % FIELD_SIZE != 0 {
         return Err(Error::new(
             ErrorKind::InvalidData,
             format!(
-                "Invalid VK file size. Expected {} bytes, but got {}",
-                VK_TOTAL_BYTES,
+                "Invalid VK file size. Must be multiple of {} bytes, got {}",
+                FIELD_SIZE,
                 vk_bytes.len()
             ),
+        ));
+    }
+
+    // Calculate number of field elements
+    let num_fields = vk_bytes.len() / FIELD_SIZE;
+    
+    if num_fields < 3 {
+        return Err(Error::new(
+            ErrorKind::InvalidData,
+            format!("VK too small. Expected at least 3 field elements, got {}", num_fields),
         ));
     }
 
@@ -97,8 +113,8 @@ fn generate_contract_code(vk: &VerificationKey) -> String {
         .collect::<Vec<String>>()
         .join(",\n    ");
 
-    // Inject the VK length
-    let template = template.replace("%%VK_LEN%%", &HONK_VK_FIELDS.to_string());
+    // Inject the VK length (actual number of field elements)
+    let template = template.replace("%%VK_LEN%%", &vk.fields.len().to_string());
 
     // Inject the VK fields
     let template = template.replace("%%VK_FIELDS%%", &vk_fields_string);
@@ -113,4 +129,12 @@ fn bytes_to_rust_hex_string(bytes: &[u8]) -> String {
         .map(|b| format!("0x{:02x}", b))
         .collect::<Vec<String>>()
         .join(", ")
+}
+
+// Helper to show last N bytes as hex (for big-endian integers)
+fn hex_encode_last_bytes(bytes: &[u8; 32], n: usize) -> String {
+    let start = 32 - n;
+    bytes[start..].iter()
+        .map(|b| format!("{:02x}", b))
+        .collect::<String>()
 }
