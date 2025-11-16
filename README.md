@@ -17,14 +17,10 @@ Pallet-Revive now supports Solidity verifiers, making ZKPs possible on Polkadot.
 
 - **One-Command Generation**: Transform Noir VK files into production-ready ink! v6 contracts
 - **Native PolkaVM Integration**: Uses Pallet-Revive's BN128 precompiles for optimal performance
-- ⚡ **Native RISC-V Performance**: ~25% gas savings vs Solidity on Pallet-Revive
-- 📦 **45% Smaller Binaries**: 57.67KB vs 95KB for equivalent Solidity verifiers
-- 🦀 **Rust Type Safety**: Compile-time guarantees that Solidity can't provide
+- **Rust Type Safety**: Compile-time guarantees that Solidity can't provide
 - **Circuit Agnostic**: Handles circuits of any complexity (tested from 57 to 128 field elements)
-- 🔗 **Seamless Integration**: Works natively with PSP standards and other ink! contracts
-- 🛡️ **Production Ready**: Comprehensive error handling with detailed diagnostics
+- **Production Ready**: Comprehensive error handling with detailed diagnostics
 - **Gas Optimized**: Efficient field arithmetic and minimal storage footprint
-- **Type-Safe**: Comprehensive error handling with detailed diagnostics
 - **Zero External Dependencies**: Fully self-contained verification on-chain
 
 ## Installation
@@ -183,9 +179,7 @@ pub fn verify(
 - **Operations**: Point addition, scalar multiplication, pairing checks
 - **Precompiles**: Leverage Pallet-Revive's native implementations for PolkaVM
 
-## Examples
-
-### Choosing Between Solidity and ink!
+## Choosing Between Solidity and ink!
 
 | **Use Solidity (Pallet-Revive)** | **Use ink! v6 (iVF)** |
 |-----------------------------------|---------------------|
@@ -194,85 +188,6 @@ pub fn verify(
 | Existing Solidity codebase | Type safety critical |
 | Rapid prototyping | Production-grade systems |
 | Team only knows Solidity | Deep Polkadot integration |
-
-### Example 1: Age Verification
-
-**Circuit** (`age_verification/src/main.nr`):
-```rust
-fn main(
-    birth_year: Field,
-    current_year: pub Field,
-    min_age: pub Field
-) {
-    let age = current_year - birth_year;
-    assert(age >= min_age);
-}
-```
-
-**Usage**:
-```bash
-# Generate VK
-cd noir-circuits/age_verification
-nargo compile && nargo codegen-verifier
-
-# Generate verifier
-cd ../../ink-generator
-cargo run -- \
-  --vk ../noir-circuits/age_verification/target/vk \
-  --output ../generated_verifier/src/lib.rs
-
-# Build and deploy
-cd ../generated_verifier
-cargo contract build
-
-# Prove you're over 18 without revealing birth year
-echo 'birth_year = "1990"\ncurrent_year = "2024"\nmin_age = "18"' > Prover.toml
-nargo prove
-# Submit proof on-chain
-```
-
-### Example 2: Private Token Balance
-
-**Circuit** (`balance_proof/src/main.nr`):
-```rust
-fn main(
-    balance: Field,
-    threshold: pub Field,
-    meets_threshold: pub Field
-) {
-    let check = if balance >= threshold { 1 } else { 0 };
-    assert(check == meets_threshold);
-}
-```
-
-### Example 3: Merkle Tree Membership
-
-**Circuit** (`merkle_proof/src/main.nr`):
-```rust
-use dep::std::merkle::compute_merkle_root;
-
-fn main(
-    leaf: Field,
-    index: Field,
-    hash_path: [Field; 20],
-    root: pub Field
-) {
-    let computed_root = compute_merkle_root(leaf, index, hash_path);
-    assert(computed_root == root);
-}
-```
-
-## Performance Comparison
-
-| Metric | Solidity (Pallet-Revive) | ink! v6 (iVF) | Improvement |
-|--------|--------------------------|---------------|-------------|
-| Bundle Size | ~95 KB | ~52 KB | **45% smaller** |
-| Gas (simple circuit) | ~2.8M | ~2.1M | **25% less** |
-| Compilation Target | EVM bytecode | RISC-V native | Native |
-| Type Safety | Solidity | Rust | Stronger |
-| Memory Safety | Runtime checks | Compile-time | Safer |
-
-*Note: Actual performance may vary based on circuit complexity*
 
 ## Acknowledgments
 
