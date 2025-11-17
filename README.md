@@ -1,5 +1,7 @@
 # iVF - ink! Verifier Factory for Noir Circuits
 
+![iVF Logo](image1.png)
+
 > Automated generation of ink! v6 smart contract verifiers from Noir zero-knowledge proof circuits for PolkaVM.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
