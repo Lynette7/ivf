@@ -106,7 +106,7 @@ cd ../generated_verifier
 cargo contract build
 ```
 
-- Deploy the `.contract` file using the [contracts UI](https://use.ink/docs/v6/getting-started/deploy-your-contract#deploying-to-passet-hub-testnet) on Passert Hub network
+- Deploy the `.contract` file using the [contracts UI](https://use.ink/docs/v6/getting-started/deploy-your-contract#deploying-to-passet-hub-testnet) on Passet Hub network
 
 ### 5. Verify a Proof
 
